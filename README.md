@@ -40,7 +40,7 @@ Some of those options were not tested or implemented fully.
 ```
 usage: compile_shader.py [-h] [--stage {vertex,fragment,geometry,tess_control,tess_evaluation,compute}] [-o OUTPUT]
                          [--full-blob] [--debug] [--glsl-separable | --no-glsl-separable]
-                         [--output-assembly | --no-output-assembly] [--output-gpu-binaries | --no-output-gpu-binaries]
+                         [--output-gpu-binaries | --no-output-gpu-binaries]
                          [--output-perf-stats | --no-output-perf-stats]
                          [--output-shader-reflection | --no-output-shader-reflection]
                          [--output-thin-gpu-binaries | --no-output-thin-gpu-binaries]
@@ -58,6 +58,11 @@ usage: compile_shader.py [-h] [--stage {vertex,fragment,geometry,tess_control,te
                          [--xfb-varying XFB_VARYING]
                          glslc_elf shader_source
 
+```
+
+Default settings:
+```
+--glsl-separable --output-thin-gpu-binaries --language glsl --debug-level g0 --opt-level default
 ```
 
 Usage:
