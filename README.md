@@ -62,7 +62,7 @@ usage: compile_shader.py [-h] [--stage {vertex,fragment,geometry,tess_control,te
 
 Default settings:
 ```
---glsl-separable --output-thin-gpu-binaries --language glsl --debug-level g0 --opt-level default
+--glsl-separable --output-thin-gpu-binaries --language glsl --debug-level g0 --opt-level default --fast-math-mask 1
 ```
 
 Usage:
