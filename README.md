@@ -12,6 +12,8 @@ This repository is used to run glslc included with some Nintendo Switch games lo
 
 ## Setup
 
+Python 3.x is required. Additional python packages are required, you can install them like this:
+
 ```
 pip install -r requirements.txt
 ```
