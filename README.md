@@ -35,7 +35,7 @@ for when things went wrong.
 ### Every option
 
 Some of those options were not tested or implemented fully.
-
+```
 usage: compile_shader.py [-h] [--stage {vertex,fragment,geometry,tess_control,tess_evaluation,compute}] [-o OUTPUT]
                          [--full-blob] [--debug] [--glsl-separable | --no-glsl-separable]
                          [--output-assembly | --no-output-assembly] [--output-gpu-binaries | --no-output-gpu-binaries]
@@ -56,19 +56,23 @@ usage: compile_shader.py [-h] [--stage {vertex,fragment,geometry,tess_control,te
                          [--xfb-varying XFB_VARYING]
                          glslc_elf shader_source
 
-Compile a GLSL shader with glslc.elf, entirely in Python,
-by emulating the AArch64 binary with Unicorn.
+```
 
 Usage:
+```
     python compile_shader.py glslc.elf shaders/example.frag --stage fragment
     python compile_shader.py glslc.elf shaders/example.frag --stage fragment --debug
     python compile_shader.py glslc.elf shaders/example.frag --stage fragment -o out.bin
+```
 
 positional arguments:
+```
   glslc_elf             path to glslc.elf
   shader_source         path to a .glsl/.frag/.vert source file
+```
 
 options:
+```
   -h, --help            show this help message and exit
   --stage {vertex,fragment,geometry,tess_control,tess_evaluation,compute}
   -o, --output OUTPUT   write the compiled shader data here (GLSLCoutput.dataOffset..dataOffset+size -- just the
@@ -77,8 +81,10 @@ options:
                         the payload -- only useful if you enabled more than one output section (--output-shader-
                         reflection etc.) and need the headers to tell them apart
   --debug               trace every stub call
+```
 
-GLSLCoptionFlags (all default to the values glslcHelper.cpp used):
+GLSLCoptionFlags:
+```
   --glsl-separable, --no-glsl-separable
   --output-assembly, --no-output-assembly
   --output-gpu-binaries, --no-output-gpu-binaries
@@ -99,11 +105,14 @@ GLSLCoptionFlags (all default to the values glslcHelper.cpp used):
   --warn-uninit {default,none,all}
   --fast-math-mask FAST_MATH_MASK
                         6-bit mask, per-component fast-math enable (accepts 0x.. or decimal)
+```
 
 GLSLCoptions (forceIncludeStdHeader / includeInfo / xfbVaryingInfo):
+```
   --force-include-std-header-file FORCE_INCLUDE_STD_HEADER_FILE
                         file whose contents get force-included as a standard header
   --include-path INCLUDE_PATH
                         #include search path (repeatable)
   --xfb-varying XFB_VARYING
                         transform-feedback varying name (repeatable)
+```
