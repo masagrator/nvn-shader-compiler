@@ -54,7 +54,7 @@ usage: compile_shader.py [-h] [--stage {vertex,fragment,geometry,tess_control,te
                          [--fast-math-mask FAST_MATH_MASK]
                          [--force-include-std-header-file FORCE_INCLUDE_STD_HEADER_FILE] [--include-path INCLUDE_PATH]
                          [--xfb-varying XFB_VARYING]
-                         glslc_elf shader_source
+                         [glslc_elf] shader_source
 
 ```
 
@@ -67,7 +67,7 @@ Usage:
 
 positional arguments:
 ```
-  glslc_elf             path to glslc.elf
+  glslc_elf             optional, path to glslc.elf
   shader_source         path to a .glsl/.frag/.vert source file
 ```
 
