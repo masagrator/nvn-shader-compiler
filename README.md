@@ -1,4 +1,4 @@
-# Running glslc.elf on Windows via Unicorn
+# Running NVN glslc on Windows via Unicorn
 
 This repository is used to run glslc included with some Nintendo Switch games locally to generate NVN shaders.
 
