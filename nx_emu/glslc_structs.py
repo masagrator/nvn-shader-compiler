@@ -195,6 +195,42 @@ CS_OFF_INFO_LOG_LENGTH = 8
 CS_OFF_SUCCESS = 12
 CS_OFF_ALLOC_ERROR = 13
 
+# -------------------------------------------------------------- GLSLCversion
+# apiMajor u32@0 apiMinor u32@4 gpuCodeVersionMajor u32@8 gpuCodeVersionMinor
+# u32@12 package u32@16 reserved[32]@20 -> sizeof == 52 (matches
+# `versionInfo(52)@16` in the GLSLCoutput layout comment right below).
+VERSION_SIZE = 52
+VERSION_OFF_API_MAJOR = 0
+VERSION_OFF_API_MINOR = 4
+VERSION_OFF_GPU_CODE_VERSION_MAJOR = 8
+VERSION_OFF_GPU_CODE_VERSION_MINOR = 12
+VERSION_OFF_PACKAGE = 16
+
+
+def get_version(emu, glslc_get_version_addr):
+    """Calls `GLSLCversion glslcGetVersion(void)` and returns its result
+    as a dict. Not declared anywhere in glslcinterface.h (that header is
+    data structures only -- no function prototypes at all), but it's a
+    real exported symbol in glslc.elf, found via emu.symbols['glslcGetVersion'].
+
+    GLSLCversion is 52 bytes, too big for AAPCS64 to return in X0/X1, so
+    per the standard "large aggregate return" convention the caller
+    allocates the 52 bytes itself and passes a pointer to it as an
+    *indirect result* in X8 (glslcGetVersion takes no real arguments of
+    its own -- confirmed by disassembly, which shows it writing straight
+    through `[x8, #off]` from its very first instruction). See
+    Emulator.call_guest_function()'s `indirect_result` param.
+    """
+    buf = emu.heap.alloc(VERSION_SIZE)
+    emu.call_guest_function(glslc_get_version_addr, indirect_result=buf)
+    return {
+        'apiMajor': emu.read_u32(buf + VERSION_OFF_API_MAJOR),
+        'apiMinor': emu.read_u32(buf + VERSION_OFF_API_MINOR),
+        'gpuCodeVersionMajor': emu.read_u32(buf + VERSION_OFF_GPU_CODE_VERSION_MAJOR),
+        'gpuCodeVersionMinor': emu.read_u32(buf + VERSION_OFF_GPU_CODE_VERSION_MINOR),
+        'package': emu.read_u32(buf + VERSION_OFF_PACKAGE),
+    }
+
 # --------------------------------------------------------------- GLSLCoutput
 # magic u32@0 reservedBits u32@4 optionFlags(8)@8 versionInfo(52)@16
 # size u32@68 dataOffset u32@72 numSections u32@76 reserved[64]@80 headers@144
@@ -458,9 +494,32 @@ def build_input(
       is the correct value for ordinary GLSL/GLES compiles.
     """
     assert len(sources) == len(stages)
-    # 0x105fc41x's own count check (`cmp w8, #7; b.hs <reject>` on this
-    # exact byte) rejects count >= 7 at runtime, so 6 is the real ceiling,
-    # not just a made-up sanity limit.
+    # glslcCompile() itself -- not just this wrapper -- rejects input.count
+    # >= 7 at runtime, unconditionally, before it even looks at
+    # optionFlags.glslSeparable. Verified two independent ways: by
+    # disassembly (`ldrb w8, [x19, #0xb8]` (that's compileObject->input.count
+    # -- 0xb8 == CO_OFF_INPUT + INPUT_OFF_COUNT) then `cmp w8, #7; b.hs
+    # <reject>`, at 0x5fc554 in the older glslc.elf build and the equivalent
+    # 0x18014 in the newer one -- same code, just relocated), and by actually
+    # driving glslcCompile() with count=7 and reading back its real
+    # infoLog, which says, verbatim: "There are more input programs than
+    # available program stages (only 6 program stages available)". So this
+    # is a hard, build-independent property of the real compiler, not a
+    # limit invented for this wrapper -- and NOT relaxed for
+    # glslSeparable=true; the check runs before that flag is ever read.
+    #
+    # It's also not reachable in practice: glslcCompile() separately (and
+    # again unconditionally -- confirmed the same way, both builds, both
+    # separable settings) rejects any two entries sharing a stage
+    # ("Can't have duplicate stages in the input GLSL source strings.") and
+    # rejects compute mixed with any non-compute stage ("Programs may not
+    # contain both a compute and a non-compute shader."). Since there are
+    # only 6 NVN_SHADER_STAGE_* values and one of them is COMPUTE (which
+    # can never sit alongside the other 5), the actual reachable ceiling
+    # for a call that has any chance of succeeding is 5 (one of each
+    # non-compute stage) or 1 (compute alone) -- 6 total inputs can only
+    # ever be constructed by either repeating a stage or adding compute to
+    # a graphics set, and both of those are independently rejected first.
     assert 0 < len(sources) <= 6, "glslc.elf itself rejects an input.count >= 7"
     n = len(sources)
 

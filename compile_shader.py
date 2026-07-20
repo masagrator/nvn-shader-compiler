@@ -97,16 +97,26 @@ def parse_shader_spec(spec):
     if not entries:
         raise ValueError("no shaders given")
     if len(entries) > 6:
-        # glslc.elf itself rejects an input.count >= 7 (see build_input()'s
-        # docstring/assert in glslc_structs.py), so this can never work.
+        # glslc.elf itself rejects an input.count >= 7 -- verified by
+        # disassembly and by actually driving it with count=7 (see the long
+        # comment on build_input()'s assert in glslc_structs.py for the
+        # exact addresses/error string, on both glslc.elf builds). Not
+        # reachable through this CLI anyway (STAGE_NAMES only has 6 keys
+        # and duplicates are rejected below), but kept as an explicit,
+        # readable error for anyone hitting this from their own code.
         raise ValueError(f"{len(entries)} shaders given, but glslc.elf accepts at most 6 per call")
     seen_stages = [s for _, s in entries]
     dupes = {s for s in seen_stages if seen_stages.count(s) > 1}
     if dupes:
-        # Confirmed by actually trying it: glslc.elf rejects this itself
-        # with "Can't have duplicate stages in the input GLSL source
-        # strings." -- checking for it here just fails fast instead of
-        # spinning up the emulator for a guaranteed rejection.
+        # Confirmed by actually trying it (both glslc.elf builds, both
+        # --glsl-separable and --no-glsl-separable): glslc.elf rejects this
+        # itself with "Can't have duplicate stages in the input GLSL
+        # source strings." -- checking for it here just fails fast instead
+        # of spinning up the emulator for a guaranteed rejection. Combined
+        # with COMPUTE never being allowed alongside a non-compute stage
+        # (also unconditional -- see "Example shaders" in the README), the
+        # actual reachable ceiling for a call with any chance of
+        # succeeding is 5 shaders (one of each non-compute stage), not 6.
         raise ValueError(f"duplicate stage(s) {sorted(dupes)} -- glslc.elf only accepts one shader per stage per call")
     return entries
 
@@ -130,11 +140,11 @@ def main():
     # ---- GLSLCoptions.optionFlags (every bit in the header, one flag each) ----
     g = ap.add_argument_group('GLSLCoptionFlags (all default to the values glslcHelper.cpp used)')
     g.add_argument('--glsl-separable', action=argparse.BooleanOptionalAction, default=True)
-    g.add_argument('--output-assembly', action=argparse.BooleanOptionalAction, default=False)
-    g.add_argument('--output-gpu-binaries', action=argparse.BooleanOptionalAction, default=False)
-    g.add_argument('--output-perf-stats', action=argparse.BooleanOptionalAction, default=False)
-    g.add_argument('--output-shader-reflection', action=argparse.BooleanOptionalAction, default=False)
-    g.add_argument('--output-thin-gpu-binaries', action=argparse.BooleanOptionalAction, default=True)
+    g.add_argument('--output-assembly', action=argparse.BooleanOptionalAction, default=True)
+    g.add_argument('--output-gpu-binaries', action=argparse.BooleanOptionalAction, default=True)
+    g.add_argument('--output-perf-stats', action=argparse.BooleanOptionalAction, default=True)
+    g.add_argument('--output-shader-reflection', action=argparse.BooleanOptionalAction, default=True)
+    g.add_argument('--output-thin-gpu-binaries', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--tessellation-passthrough-gs', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--prioritize-consecutive-tex', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--error-on-scratch-mem-usage', action=argparse.BooleanOptionalAction, default=False)
@@ -189,6 +199,25 @@ def main():
     glslcCompile = emu.symbols['glslcCompile']
     glslcFinalize = emu.symbols['glslcFinalize']
     glslcSetAllocator = emu.symbols['glslcSetAllocator']
+
+    # glslcGetVersion() isn't declared anywhere in glslcinterface.h (that
+    # header is data structures only, no function prototypes at all), but
+    # it's a real exported symbol in glslc.elf and doesn't depend on
+    # anything glslcSetAllocator/glslcInitialize set up, so it's safe to
+    # call first. See glslc_structs.get_version()'s docstring for its
+    # calling convention (an AAPCS64 indirect-result return, not a normal
+    # argument/return-value pair).
+    glslcGetVersion = emu.symbols.get('glslcGetVersion')
+    if glslcGetVersion is not None:
+        version = gs.get_version(emu, glslcGetVersion)
+        print(
+            "[*] glslcGetVersion -> "
+            f"api {version['apiMajor']}.{version['apiMinor']}, "
+            f"gpuCode {version['gpuCodeVersionMajor']}.{version['gpuCodeVersionMinor']}, "
+            f"package {version['package']}"
+        )
+    else:
+        print("[!] glslcGetVersion not exported by this build -- skipping", file=sys.stderr)
 
     # glslcInitialize refuses to run until the caller has registered
     # allocator callbacks via glslcSetAllocator(allocate, free, reallocate,

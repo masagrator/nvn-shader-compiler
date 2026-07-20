@@ -244,11 +244,25 @@ class Emulator:
     # ------------------------------------------------------------------
     # calling convention helpers
     # ------------------------------------------------------------------
-    def call_guest_function(self, addr, args=(), fp_args=()):
+    def call_guest_function(self, addr, args=(), fp_args=(), indirect_result=None):
+        """
+        indirect_result: for functions that return an aggregate (struct)
+        too large to fit in X0/X1 (AAPCS64: >16 bytes) -- e.g.
+        `GLSLCversion glslcGetVersion(void)`, where GLSLCversion is 52
+        bytes. Per AAPCS64 §5.5, the caller allocates space for the
+        result and passes a pointer to it in X8 (a separate register from
+        the normal X0-X7 argument registers); the callee writes the
+        result there directly and X0's value on return is not meaningful.
+        Confirmed by disassembly for glslcGetVersion specifically: it
+        writes straight through `[x8, #off]` from its first instruction,
+        with no `args` of its own.
+        """
         for i, a in enumerate(args):
             self.uc.reg_write(_XREGS[i], a & 0xFFFFFFFFFFFFFFFF)
         for i, d in enumerate(fp_args):
             self.uc.reg_write(_DREGS[i], struct.unpack('<Q', struct.pack('<d', d))[0])
+        if indirect_result is not None:
+            self.uc.reg_write(UC_ARM64_REG_X8, indirect_result & 0xFFFFFFFFFFFFFFFF)
         self.uc.reg_write(UC_ARM64_REG_X30, RETURN_SENTINEL)
         self.uc.reg_write(UC_ARM64_REG_PC, addr)
         try:
