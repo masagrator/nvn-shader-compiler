@@ -53,17 +53,18 @@ usage: compile_shader.py [-h] [-o OUTPUT] [--debug] [--glsl-separable | --no-gls
                          [--unroll-control {default,none,all}] [--warn-uninit {default,none,all}]
                          [--fast-math-mask FAST_MATH_MASK]
                          [--force-include-std-header-file FORCE_INCLUDE_STD_HEADER_FILE] [--include-path INCLUDE_PATH]
-                         [--xfb-varying XFB_VARYING]
+                         [--xfb-varying XFB_VARYING] [--spirv-entry-point ENTRY_POINT]
                          glslc_elf shaders
 ```
 
 Default settings:
 ```
---glsl-separable --output-thin-gpu-binaries --language glsl --fast-math-mask 1
+--glsl-separable --output-thin-gpu-binaries --language glsl --fast-math-mask 1 --spirv-entry-point main
 ```
 
 Example usage:
 ```
+    python compile_shader.py glslc.elf --language spirv shaders/example.spv:fragment -o output/out.bin
     python compile_shader.py glslc.elf shaders/example.frag:fragment
     python compile_shader.py glslc.elf shaders/example.frag:fragment --debug
     python compile_shader.py glslc.elf shaders/example.frag:fragment -o output/out.bin
@@ -87,30 +88,6 @@ options:
   -h, --help            show this help message and exit
   -o, --output OUTPUT   write the compiled GLSLCoutput binary blob here, it will also output to the same folder code and control section of each shader as separate files
   --debug               trace every stub call
-```
-
-GLSLCoptionFlags:
-```
-  --glsl-separable, --no-glsl-separable
-  --output-assembly, --no-output-assembly
-  --output-gpu-binaries, --no-output-gpu-binaries
-  --output-perf-stats, --no-output-perf-stats
-  --output-shader-reflection, --no-output-shader-reflection
-  --output-thin-gpu-binaries, --no-output-thin-gpu-binaries
-  --tessellation-passthrough-gs, --no-tessellation-passthrough-gs
-  --prioritize-consecutive-tex, --no-prioritize-consecutive-tex
-  --error-on-scratch-mem-usage, --no-error-on-scratch-mem-usage
-  --enable-cbf-optimization, --no-enable-cbf-optimization
-  --enable-warp-culling, --no-enable-warp-culling
-  --enable-multithread-compilation, --no-enable-multithread-compilation
-  --language {glsl,gles,spirv}
-  --debug-level {none,g0,g1,g2}
-  --spill-control {default,no_spill}
-  --opt-level {default,none}
-  --unroll-control {default,none,all}
-  --warn-uninit {default,none,all}
-  --fast-math-mask FAST_MATH_MASK
-                        6-bit mask, per-component fast-math enable (accepts 0x.. or decimal)
 ```
 
 GLSLCoptions (forceIncludeStdHeader / includeInfo / xfbVaryingInfo):
