@@ -35,17 +35,6 @@ Put generated elf file to root of this repository.
 
 ## Run
 
-```
-python compile_shader.py glslc.elf shaders/example.frag:fragment -o out.bin
-```
-
-Add `--debug` to see every imported-function call (name + first 4 args)
-as it happens — this is your main debugging tool if something misbehaves,
-since it shows exactly how far the compiler got and what it was asking
-for when things went wrong.
-
-### Every option
-
 Some of those options were not tested or implemented fully.
 ```
 usage: compile_shader.py [-h] [-o OUTPUT] [--debug] [--glsl-separable | --no-glsl-separable]
