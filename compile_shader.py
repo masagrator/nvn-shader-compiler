@@ -1,43 +1,4 @@
 #!/usr/bin/env python3
-"""
-Compile a GLSL shader with glslc.elf, entirely in Python,
-by emulating the AArch64 binary with Unicorn.
-
-Usage:
-    python compile_shader.py glslc.elf shaders/example.frag:fragment
-    python compile_shader.py glslc.elf shaders/example.frag:fragment --debug
-    python compile_shader.py glslc.elf shaders/example.frag:fragment -o out.bin
-
-    # multiple shaders in one call, ";"-separated -- independent compiles
-    # by default, or linked into one program with --no-glsl-separable:
-    python compile_shader.py glslc.elf "a.vert:vertex;a.frag:fragment" --no-glsl-separable -o out.bin
-
-    # compile from a real (binary) SPIR-V module instead of GLSL text --
-    # entry point defaults to "main" for every module, override with
-    # --spirv-entry-point if yours differs:
-    python compile_shader.py glslc.elf shaders/example.frag.spv:fragment --language spirv -o out.bin
-
-This mirrors the C++ example:
-
-    std::vector<const char *> shaderSources;
-    std::vector<NVNshaderStage> shaderStages;
-    shaderSources.push_back(source);
-    shaderStages.push_back(NVN_SHADER_STAGE_FRAGMENT);
-    GLSLCcompileObject m_CompileObject{};
-    glslcInitialize(&m_CompileObject);
-    GLSLCoptions *options = &(m_CompileObject.options);
-    options->optionFlags.outputAssembly = true;
-    options->optionFlags.outputGpuBinaries = true;
-    options->optionFlags.glslSeparable = true;
-    options->optionFlags.outputPerfStats = true;
-    options->optionFlags.outputShaderReflection = true;
-    options->optionFlags.outputDebugInfo = GLSLC_DEBUG_LEVEL_G0;
-    m_CompileObject.input.sources = &shaderSources[0];
-    m_CompileObject.input.stages = &shaderStages[0];
-    m_CompileObject.input.count = shaderSources.size();
-    if (!glslcCompile(&m_CompileObject)) { ...fail... }
-    glslcFinalize(&m_CompileObject);
-"""
 import argparse
 import os
 import sys
@@ -157,7 +118,7 @@ def main():
     g.add_argument('--enable-warp-culling', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--enable-multithread-compilation', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--language', choices=LANGUAGE_NAMES, default='glsl')
-    g.add_argument('--debug-level', choices=DEBUG_LEVEL_NAMES, default='none')
+    g.add_argument('--debug-level', choices=DEBUG_LEVEL_NAMES, default='g0')
     g.add_argument('--spill-control', choices=SPILL_NAMES, default='default')
     g.add_argument('--opt-level', choices=OPTLEVEL_NAMES, default='default')
     g.add_argument('--unroll-control', choices=UNROLL_NAMES, default='default')
@@ -369,19 +330,39 @@ def main():
                 # parse_shader_spec() already rejects duplicate stages (and
                 # glslc.elf would reject them too), so stage_name is unique
                 # per GPU_CODE section here -- no filename collisions.
+                reflection_count = 0
                 for sec in parsed['sections']:
-                    if sec['type'] != gs.GLSLC_SECTION_TYPE_GPU_CODE:
-                        continue
-                    code_path = f"{base}.{sec['stage_name']}.code.bin"
-                    control_path = f"{base}.{sec['stage_name']}.control.bin"
-                    with open(code_path, 'wb') as f:
-                        f.write(sec['code'])
-                    with open(control_path, 'wb') as f:
-                        f.write(sec['control'])
-                    print(f"[+] wrote {code_path}  ({len(sec['code'])} bytes -- just the GPU machine code, "
-                          f"no container/header bytes)")
-                    print(f"[+] wrote {control_path}  ({len(sec['control'])} bytes -- the NVN control segment "
-                          f"that has to accompany the code)")
+                    if sec['type'] == gs.GLSLC_SECTION_TYPE_GPU_CODE:
+                        code_path = f"{base}.{sec['stage_name']}.code.bin"
+                        control_path = f"{base}.{sec['stage_name']}.control.bin"
+                        with open(code_path, 'wb') as f:
+                            f.write(sec['code'])
+                        with open(control_path, 'wb') as f:
+                            f.write(sec['control'])
+                        print(f"[+] wrote {code_path}  ({len(sec['code'])} bytes -- just the GPU machine code, "
+                              f"no container/header bytes)")
+                        print(f"[+] wrote {control_path}  ({len(sec['control'])} bytes -- the NVN control segment "
+                              f"that has to accompany the code)")
+                    elif sec['type'] == gs.GLSLC_SECTION_TYPE_REFLECTION:
+                        # Unlike GPU_CODE, GLSLCprogramReflectionHeader is one
+                        # per compile object, not one per stage -- it
+                        # describes the whole linked program as a unit
+                        # (uniforms/uniform blocks, SSBOs, program inputs/
+                        # outputs, xfb varyings, subroutines; see
+                        # GLSLCcompileObject.reflectionSection and
+                        # GLSLCprogramReflectionHeader in glslcinterface.h),
+                        # so there's no stage name to key the filename on.
+                        # Only ever expect one; suffix with a counter instead
+                        # of overwriting in the unexpected case of more.
+                        suffix = '' if reflection_count == 0 else str(reflection_count)
+                        reflection_path = f"{base}.reflection{suffix}.bin"
+                        with open(reflection_path, 'wb') as f:
+                            f.write(sec['data'])
+                        print(f"[+] wrote {reflection_path}  ({len(sec['data'])} bytes -- raw "
+                              f"GLSLCprogramReflectionHeader section, whole program: uniform/uniform-block, "
+                              f"SSBO, program input/output, and xfb-varying reflection data; see "
+                              f"glslcinterface.h for its internal layout)")
+                        reflection_count += 1
 
         print("[*] glslcFinalize ...")
         emu.call_guest_function(glslcFinalize, [compile_obj])
