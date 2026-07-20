@@ -65,6 +65,7 @@ Default settings:
 Example usage:
 ```
     python compile_shader.py glslc.elf --language spirv shaders/example.spv:fragment -o output/out.bin
+    python compile_shader.py glslc.elf --language gles shaders/example.gles:fragment -o output/out.bin
     python compile_shader.py glslc.elf shaders/example.frag:fragment
     python compile_shader.py glslc.elf shaders/example.frag:fragment --debug
     python compile_shader.py glslc.elf shaders/example.frag:fragment -o output/out.bin
