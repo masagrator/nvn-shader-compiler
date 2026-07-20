@@ -100,7 +100,7 @@ options:
   --opt-level
         optimization level, default means it's enabled at the level hardcoded in glslc
   --debug-level
-        output DEBUG_INFO section with amount of details that depends on chosen level
+        output to blob DEBUG_INFO section with amount of details that depends on chosen level
 ```
 
 GLSLCoptions (forceIncludeStdHeader / includeInfo / xfbVaryingInfo):
