@@ -23,9 +23,9 @@ pip install -r requirements.txt
 That's `unicorn` (the CPU emulator) and `pyelftools` (ELF parsing). Both
 have prebuilt Windows wheels, no compiler needed.
 
-You need to get `glslc` from somewhere, for example from listed games above. It will be in exefs partition as some numbered "subsdk" file. You need to convert it to ELF file with `nx2elf`.
-Linux: https://github.com/open-ead/nx-decomp-tools-binaries/blob/master/linux/nx2elf
-MacOS: https://github.com/open-ead/nx-decomp-tools-binaries/blob/master/macos/nx2elf
+You need to get `glslc` from somewhere, for example from listed games above. It will be in exefs partition as some numbered "subsdk" file. You need to convert it to ELF file with `nx2elf`.<br>
+Linux: https://github.com/open-ead/nx-decomp-tools-binaries/blob/master/linux/nx2elf <br>
+MacOS: https://github.com/open-ead/nx-decomp-tools-binaries/blob/master/macos/nx2elf <br>
 Windows: included in "tools" folder
 
 To confirm it's glslc, convert file to ELF, then use hex editor to find inside ELF file `glslcCompile` text. 
