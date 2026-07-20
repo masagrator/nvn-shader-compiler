@@ -582,6 +582,17 @@ def h_ldexp(emu):
     emu.return_to_caller()
 
 
+def h_finite(emu):
+    v = emu.get_farg(0)
+    emu.set_return(1 if math.isfinite(v) else 0)
+    emu.return_to_caller()
+
+
+def h_expf(emu):
+    emu.set_freturn32(_safe(math.exp, emu.get_farg32(0)))
+    emu.return_to_caller()
+
+
 def h_frexp(emu):
     x, exp_ptr = emu.get_farg(0), emu.get_arg(0)
     m, e = _safe(math.frexp, x), 0
@@ -606,6 +617,17 @@ def h_getenv(emu):
 
 def h_exit(emu):
     raise emu_core.GuestExit(emu.get_arg(0))
+
+
+def h_clock(emu):
+    # Only ever used (as far as we've seen) for elapsed-time bookkeeping/
+    # logging, never for anything that affects the compiled output, so any
+    # monotonically-increasing value in a plausible CLOCKS_PER_SEC==1e6
+    # ("microseconds") range is fine. time.process_time() is monotonic
+    # within one run, which is all a single compile invocation ever needs.
+    import time
+    emu.set_return(int(time.process_time() * 1_000_000) & 0xFFFFFFFFFFFFFFFF)
+    emu.return_to_caller()
 
 
 # ---- setjmp/longjmp (implemented via Unicorn context save/restore) ----
@@ -684,6 +706,127 @@ def h_glslc_GetAllocator(emu):
     addr = emu.heap.alloc(128)
     emu.write_bytes(addr, b'\x00' * 128)
     emu.set_return(addr)
+    emu.return_to_caller()
+
+
+# ---- Itanium C++ ABI guard variables (thread-safe function-local statics).
+#      Only the low byte of the guard word is the real "already initialized"
+#      flag on every AArch64 target that uses the *generic* Itanium ABI
+#      (as opposed to 32-bit ARM's separate __aeabi guard scheme, which
+#      doesn't apply here). We're single-threaded, so no locking is needed
+#      -- acquire just needs to tell the guest "go ahead and run the
+#      initializer" the first time, and "skip it" every time after. ----
+def h_cxa_guard_acquire(emu):
+    guard = emu.get_arg(0)
+    done = getattr(emu, '_cxa_guards_done', None)
+    if done is None:
+        done = emu._cxa_guards_done = set()
+    if guard in done or emu.read_u8(guard) != 0:
+        emu.set_return(0)   # already initialized -- skip the initializer
+    else:
+        emu.set_return(1)   # not initialized -- caller will run it, then call guard_release
+    emu.return_to_caller()
+
+
+def h_cxa_guard_release(emu):
+    guard = emu.get_arg(0)
+    done = getattr(emu, '_cxa_guards_done', None)
+    if done is None:
+        done = emu._cxa_guards_done = set()
+    done.add(guard)
+    emu.write_u8(guard, 1)
+    emu.return_to_caller()
+
+
+def h_cxa_guard_abort(emu):
+    # Initializer threw partway through -- leave the guard clear so a later
+    # attempt (if any) tries again, matching real __cxa_guard_abort.
+    emu.return_to_caller()
+
+
+# ---- pthread mutex/cond: the emulator is single-threaded (one Unicorn
+#      context, nothing ever runs concurrently with the guest), so these
+#      degrade to no-ops -- lock/unlock always "succeed" instantly, and
+#      broadcast/wait need no real synchronization since nothing else is
+#      running to race with. A real pthread_cond_wait blocks until signaled,
+#      which we can't honor if it's ever reached for a reason other than
+#      "immediately followed by the signal on this same thread", but no
+#      call site that would deadlock has shown up in testing. ----
+def h_pthread_mutex_lock(emu):
+    emu.set_return(0)
+    emu.return_to_caller()
+
+
+h_pthread_mutex_unlock = h_pthread_mutex_lock
+
+
+def h_pthread_cond_wait(emu):
+    emu.set_return(0)
+    emu.return_to_caller()
+
+
+h_pthread_cond_broadcast = h_pthread_cond_wait
+
+
+# ---- locale: this codebase already treats all text as raw bytes (UTF-8 in
+#      practice) everywhere else, so rather than modeling real locale
+#      objects we always behave as the "C" locale and hand back a distinct
+#      non-NULL opaque handle for any locale_t a caller creates. The *_l
+#      suffixed functions (strtod_l, isdigit_l, etc.) can then just ignore
+#      their trailing locale_t arg and call straight through to the
+#      already-implemented non-'_l' behavior. ----
+_C_LOCALE = 0x1  # any fixed non-zero sentinel; never dereferenced as a real object
+_LC_GLOBAL_LOCALE = 0xFFFFFFFFFFFFFFFF  # matches musl's ((locale_t)-1)
+
+
+def h_newlocale(emu):
+    emu.set_return(_C_LOCALE)
+    emu.return_to_caller()
+
+
+def h_freelocale(emu):
+    emu.return_to_caller()
+
+
+def h_uselocale(emu):
+    newloc = emu.get_arg(0)
+    old = getattr(emu, '_current_locale', _LC_GLOBAL_LOCALE)
+    if newloc != 0:
+        emu._current_locale = newloc
+    emu.set_return(old)
+    emu.return_to_caller()
+
+
+def h_ctype_get_mb_cur_max(emu):
+    emu.set_return(1)  # "C" locale: multibyte encoding is 1 byte per char
+    emu.return_to_caller()
+
+
+def h_mbtowc(emu):
+    # "C" locale multibyte encoding is the identity mapping (1 byte == 1
+    # wide char), so this is just "read a byte, zero-extend it".
+    pwc, s, n = emu.get_arg(0), emu.get_arg(1), emu.get_arg(2)
+    if s == 0:
+        emu.set_return(0)  # stateless encoding -> no shift state to reset
+        emu.return_to_caller()
+        return
+    if n == 0:
+        emu.set_return(-1 & 0xFFFFFFFFFFFFFFFF)
+        emu.return_to_caller()
+        return
+    b = emu.read_u8(s)
+    if pwc:
+        emu.write_u32(pwc, b)
+    emu.set_return(0 if b == 0 else 1)
+    emu.return_to_caller()
+
+
+# ---- Nintendo's relocation-read-only-protection hook. We map everything
+#      RWX for simplicity (this is a single trusted local file, not a
+#      security sandbox -- see emu_core.py), so there's nothing for this to
+#      actually do. ----
+def h_nn_ro_ProtectRelro(emu):
+    emu.set_return(0)
     emu.return_to_caller()
 
 
@@ -998,9 +1141,23 @@ _HANDLERS = {
     'log': h_log, 'logf': h_logf, 'pow': h_pow, 'fmod': h_fmod,
     'ldexp': h_ldexp, 'frexp': h_frexp,
 
+    'finite': h_finite, 'expf': h_expf,
+
     '__errno_location': h_errno_location, 'getenv': h_getenv, 'exit': h_exit,
+    'clock': h_clock,
 
     'setjmp': h_setjmp, 'longjmp': h_longjmp,
+
+    '__cxa_guard_acquire': h_cxa_guard_acquire,
+    '__cxa_guard_release': h_cxa_guard_release,
+    '__cxa_guard_abort': h_cxa_guard_abort,
+    '_ZN2nn2ro12ProtectRelroEPKvS2_S2_S2_S2_': h_nn_ro_ProtectRelro,
+
+    'pthread_mutex_lock': h_pthread_mutex_lock, 'pthread_mutex_unlock': h_pthread_mutex_unlock,
+    'pthread_cond_wait': h_pthread_cond_wait, 'pthread_cond_broadcast': h_pthread_cond_broadcast,
+
+    'newlocale': h_newlocale, 'freelocale': h_freelocale, 'uselocale': h_uselocale,
+    'mbtowc': h_mbtowc, '__ctype_get_mb_cur_max': h_ctype_get_mb_cur_max,
 
     '_Znwm': h_Znwm, '_ZdlPv': h_ZdlPv,
 

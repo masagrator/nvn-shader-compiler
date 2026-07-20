@@ -202,6 +202,126 @@ OUTPUT_OFF_MAGIC = 0
 OUTPUT_OFF_SIZE = 68
 OUTPUT_OFF_DATA_OFFSET = 72
 OUTPUT_OFF_NUM_SECTIONS = 76
+OUTPUT_OFF_HEADERS = 144
+
+# --------------------------------------------------- GLSLCsectionHeaderUnion
+# Every section header starts with the 44-byte GLSLCsectionHeaderCommon
+# (size u32@0, dataOffset u32@4, type enum(i32)@8, reserved[32]@12), and the
+# array entry stride is sizeof(GLSLCsectionHeaderUnion) = 144 (the largest
+# member, GLSLCgpuCodeHeader).
+#
+# IMPORTANT, and the actual point of this comment block: `common.dataOffset`
+# is an ABSOLUTE byte offset from the start of the whole GLSLCoutput blob
+# (not relative to GLSLCoutput.dataOffset, even though for whichever
+# section happens to be laid out first the two coincide) and `common.size`
+# is that section's exact, unpadded payload length. Sections are packed
+# back-to-back, each one 8-byte aligned, i.e.
+# sections[i+1].dataOffset == round_up_8(sections[i].dataOffset + sections[i].size).
+# Verified directly against a real compiled blob: with 4 sections the
+# offsets/sizes chain together exactly (1008+2472->3480, 3480+264->3744,
+# 3744+268->4016 after 8-byte rounding, 4016+462->4480 == the blob's total
+# `size`, again after 8-byte rounding).
+SECTION_HEADER_STRIDE = 144
+SECTION_COMMON_SIZE = 44
+SEC_OFF_SIZE = 0
+SEC_OFF_DATA_OFFSET = 4
+SEC_OFF_TYPE = 8
+
+GLSLC_SECTION_TYPE_GPU_CODE = 0
+GLSLC_SECTION_TYPE_ASM_DUMP = 1
+GLSLC_SECTION_TYPE_PERF_STATS = 2
+GLSLC_SECTION_TYPE_REFLECTION = 3
+GLSLC_SECTION_TYPE_DEBUG_INFO = 4
+SECTION_TYPE_NAMES = {
+    GLSLC_SECTION_TYPE_GPU_CODE: 'GPU_CODE',
+    GLSLC_SECTION_TYPE_ASM_DUMP: 'ASM_DUMP',
+    GLSLC_SECTION_TYPE_PERF_STATS: 'PERF_STATS',
+    GLSLC_SECTION_TYPE_REFLECTION: 'REFLECTION',
+    GLSLC_SECTION_TYPE_DEBUG_INFO: 'DEBUG_INFO',
+}
+STAGE_NAMES_BY_VALUE = {
+    NVN_SHADER_STAGE_VERTEX: 'vertex', NVN_SHADER_STAGE_FRAGMENT: 'fragment',
+    NVN_SHADER_STAGE_GEOMETRY: 'geometry', NVN_SHADER_STAGE_TESS_CONTROL: 'tess_control',
+    NVN_SHADER_STAGE_TESS_EVALUATION: 'tess_evaluation', NVN_SHADER_STAGE_COMPUTE: 'compute',
+}
+
+# GLSLCgpuCodeHeader fields beyond `common` (offsets from the section
+# entry's own start, i.e. absolute-within-entry, not relative to `common`).
+# controlOffset/dataOffset here are themselves relative to THIS section's
+# own data region (whose absolute start in the blob is common.dataOffset) --
+# confirmed empirically: controlOffset=0, dataOffset=controlSize (control
+# then code, back to back), and controlSize+dataSize == common.size exactly.
+GPU_CODE_OFF_STAGE = 44
+GPU_CODE_OFF_CONTROL_OFFSET = 48
+GPU_CODE_OFF_DATA_OFFSET = 52
+GPU_CODE_OFF_DATA_SIZE = 56
+GPU_CODE_OFF_CONTROL_SIZE = 60
+GPU_CODE_OFF_SCRATCH_PER_WARP = 64
+GPU_CODE_OFF_SCRATCH_RECOMMENDED = 68
+
+# GLSLCasmDumpHeader field beyond `common`
+ASM_DUMP_OFF_STAGE = 44
+
+
+def parse_glslc_output(blob):
+    """Parse a raw GLSLCoutput blob (as returned by read_compile_results)
+    into a structured dict, separating the actual shader payload out from
+    the container/header bytes.
+
+    Returns:
+      {
+        'magic': int, 'size': int, 'dataOffset': int, 'numSections': int,
+        'sections': [
+          {
+            'type': int, 'type_name': str,
+            'size': int,          # this section's exact payload length
+            'data_offset': int,   # absolute offset of this section's payload within the blob
+            'data': bytes,        # blob[data_offset : data_offset+size] -- this section's raw payload
+            # present only for type == GLSLC_SECTION_TYPE_GPU_CODE:
+            'stage': int, 'stage_name': str,
+            'control': bytes,     # the NVN "control" segment -- required alongside code
+            'code': bytes,        # the actual GPU machine code -- this is "the shader"
+          }, ...
+        ],
+      }
+    """
+    magic = struct.unpack_from('<I', blob, OUTPUT_OFF_MAGIC)[0]
+    size = struct.unpack_from('<I', blob, OUTPUT_OFF_SIZE)[0]
+    data_offset = struct.unpack_from('<I', blob, OUTPUT_OFF_DATA_OFFSET)[0]
+    num_sections = struct.unpack_from('<I', blob, OUTPUT_OFF_NUM_SECTIONS)[0]
+
+    sections = []
+    for i in range(num_sections):
+        base = OUTPUT_OFF_HEADERS + i * SECTION_HEADER_STRIDE
+        sec_size = struct.unpack_from('<I', blob, base + SEC_OFF_SIZE)[0]
+        sec_data_offset = struct.unpack_from('<I', blob, base + SEC_OFF_DATA_OFFSET)[0]
+        sec_type = struct.unpack_from('<i', blob, base + SEC_OFF_TYPE)[0]
+        entry = {
+            'type': sec_type,
+            'type_name': SECTION_TYPE_NAMES.get(sec_type, f'UNKNOWN({sec_type})'),
+            'size': sec_size,
+            'data_offset': sec_data_offset,
+            'data': bytes(blob[sec_data_offset:sec_data_offset + sec_size]),
+        }
+        if sec_type == GLSLC_SECTION_TYPE_GPU_CODE:
+            stage = struct.unpack_from('<I', blob, base + GPU_CODE_OFF_STAGE)[0]
+            control_off = struct.unpack_from('<I', blob, base + GPU_CODE_OFF_CONTROL_OFFSET)[0]
+            code_off = struct.unpack_from('<I', blob, base + GPU_CODE_OFF_DATA_OFFSET)[0]
+            code_size = struct.unpack_from('<I', blob, base + GPU_CODE_OFF_DATA_SIZE)[0]
+            control_size = struct.unpack_from('<I', blob, base + GPU_CODE_OFF_CONTROL_SIZE)[0]
+            entry['stage'] = stage
+            entry['stage_name'] = STAGE_NAMES_BY_VALUE.get(stage, f'stage{stage}')
+            abs_control = sec_data_offset + control_off
+            abs_code = sec_data_offset + code_off
+            entry['control'] = bytes(blob[abs_control:abs_control + control_size])
+            entry['code'] = bytes(blob[abs_code:abs_code + code_size])
+        elif sec_type == GLSLC_SECTION_TYPE_ASM_DUMP:
+            entry['stage'] = struct.unpack_from('<I', blob, base + ASM_DUMP_OFF_STAGE)[0]
+            entry['stage_name'] = STAGE_NAMES_BY_VALUE.get(entry['stage'], f"stage{entry['stage']}")
+        sections.append(entry)
+
+    return {'magic': magic, 'size': size, 'dataOffset': data_offset,
+            'numSections': num_sections, 'sections': sections}
 
 
 def _build_ptr_array(emu, ptrs):
@@ -376,33 +496,10 @@ def build_input(
 
 
 def read_compile_results(emu, compile_object_addr):
-    """After glslcCompile(), pull out (success, info_log, output_blob_or_None, full_blob_or_None).
-
-    GLSLCoutput's `size`/`dataOffset` work exactly like the `size`/`dataOffset`
-    pair inside GLSLCsectionHeaderCommon (same field order, same meaning, just
-    one level up): `dataOffset` is the byte offset -- from the start of the
-    GLSLCoutput struct -- where the actual compiled data begins, and `size` is
-    the length of that data. Everything before `dataOffset` is just the fixed
-    header fields plus the `headers[numSections]` section-descriptor table --
-    metadata, not shader bytes.
-
-    So:
-      - `output_blob` is the real payload: raw[dataOffset : dataOffset+size].
-        This is what you want if all you need is the compiled shader data
-        itself (the common case -- one GPU code section).
-      - `full_blob` is the *complete* GLSLCoutput struct (headers included),
-        i.e. raw[0 : dataOffset+size]. Keep this around if you enabled more
-        than one output section (e.g. --output-shader-reflection alongside
-        the default GPU binary) -- in that case `output_blob` is *all* of
-        those sections' data concatenated together with no way to tell them
-        apart on its own, and you need to walk full_blob's
-        `headers[i].genericHeader.common.{dataOffset,size,type}` (offsets
-        relative to the start of full_blob, per Nintendo's own GLSLC
-        programming guide) to pull out each section individually.
-    """
+    """After glslcCompile(), pull out (success, info_log, output_blob_or_None)."""
     results_ptr = emu.read_u64(compile_object_addr + CO_OFF_LAST_COMPILED_RESULTS)
     if results_ptr == 0:
-        return False, "(no GLSLCresults produced)", None, None
+        return False, "(no GLSLCresults produced)", None
 
     status_ptr = emu.read_u64(results_ptr + RESULTS_OFF_COMPILATION_STATUS)
     output_ptr = emu.read_u64(results_ptr + RESULTS_OFF_GLSLC_OUTPUT)
@@ -418,13 +515,9 @@ def read_compile_results(emu, compile_object_addr):
             info_log = raw.decode('utf-8', errors='replace').rstrip('\x00')
 
     output_blob = None
-    full_blob = None
     if output_ptr:
-        data_offset = emu.read_u32(output_ptr + OUTPUT_OFF_DATA_OFFSET)
-        data_size = emu.read_u32(output_ptr + OUTPUT_OFF_SIZE)
-        total_len = data_offset + data_size
-        if 0 < data_size and 0 < total_len < (1 << 28):
-            full_blob = emu.read_bytes(output_ptr, total_len)
-            output_blob = full_blob[data_offset:]
+        blob_size = emu.read_u32(output_ptr + OUTPUT_OFF_SIZE)
+        if 0 < blob_size < (1 << 28):
+            output_blob = emu.read_bytes(output_ptr, blob_size)
 
-    return success, info_log, output_blob, full_blob
+    return success, info_log, output_blob

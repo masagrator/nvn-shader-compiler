@@ -11,7 +11,19 @@ Relocation types actually present in this binary (checked with readelf -r):
     R_AARCH64_RELATIVE   (1027)  -- base + addend, by far the most common
     R_AARCH64_JUMP_SLOT  (1026)  -- PLT GOT slot for an imported function
     R_AARCH64_GLOB_DAT   (1025)  -- GOT slot for an imported data symbol
+    R_AARCH64_ABS64      (257)   -- base + symbol value + addend (newer
+                                     builds use this for C++ typeinfo/vtable
+                                     data pointers)
 There is no PT_TLS segment, so no thread-local-storage setup is required.
+
+Newer glslc.elf builds (linked with a newer lld) pack the vast majority of
+R_AARCH64_RELATIVE entries into the compact SHT_RELR/DT_RELR format instead
+of listing them individually in .rela.dyn -- a bitmap-based encoding that
+only works because relative relocations all share the same type and use an
+*implicit* addend (whatever raw value already sits in the target word,
+exactly like the R_AARCH64_RELATIVE entries this loader already handles,
+just not spelled out one-by-one). See _decode_relr()/_load_relr_relocations()
+below. Older builds have no DT_RELR tag at all, so this is skipped for them.
 """
 import io
 import struct
@@ -32,6 +44,55 @@ def _page_align_down(x):
 
 def _page_align_up(x):
     return (x + PAGE - 1) & ~(PAGE - 1)
+
+
+def _file_offset_for_vaddr(ef, vaddr):
+    """Map a (pre-relocation, link-time) vaddr to a file offset by finding
+    the PT_LOAD segment that contains it. DT_RELR's own array, and the
+    words it decodes to, live inside ordinary loaded segments (they're not
+    broken out into their own section in every build -- newer glslc.elf
+    strips most section headers, so we go via program headers instead,
+    which are always present)."""
+    for seg in ef.iter_segments():
+        if seg['p_type'] != 'PT_LOAD':
+            continue
+        v0 = seg['p_vaddr']
+        if v0 <= vaddr < v0 + seg['p_filesz']:
+            return seg['p_offset'] + (vaddr - v0)
+    raise ValueError(f"vaddr {vaddr:#x} not covered by any PT_LOAD segment's file image")
+
+
+def _decode_relr(words):
+    """Decode a DT_RELR bitmap stream into the list of vaddrs it covers.
+
+    Format (see the ELF RELR proposal / what lld and glibc/musl both
+    produce): each 8-byte word is either
+      - an even value: a literal address -- apply a relative relocation
+        there, then treat the *next* word's implicit base as this address
+        plus 8; or
+      - an odd value: a bitmap covering up to 63 consecutive 8-byte slots
+        starting right after the most recent literal-address word (bit 1 of
+        the word = the first slot, bit 2 = the second slot, and so on);
+        after a bitmap word the base advances by 63*8 so a run of bitmap
+        words can cover long stretches without repeating an address word.
+    """
+    out = []
+    base = 0
+    for w in words:
+        if (w & 1) == 0:
+            addr = w
+            out.append(addr)
+            base = addr + 8
+        else:
+            bits = w >> 1
+            slot = 0
+            while bits:
+                if bits & 1:
+                    out.append(base + slot * 8)
+                bits >>= 1
+                slot += 1
+            base += 63 * 8
+    return out
 
 
 class LoadedELF:
@@ -95,7 +156,8 @@ def load_elf(path, base):
             'info': sym['st_info'],
         })
 
-    # ---- .dynamic tags (INIT / INIT_ARRAY) ----
+    # ---- .dynamic tags (INIT / INIT_ARRAY / RELR) ----
+    relr_vaddr = relr_size = relr_entsize = None
     dyn = ef.get_section_by_name('.dynamic')
     if dyn is not None:
         for tag in dyn.iter_tags():
@@ -105,6 +167,12 @@ def load_elf(path, base):
                 info.init_array_vaddr = tag.entry.d_val
             elif tag.entry.d_tag == 'DT_INIT_ARRAYSZ':
                 info.init_array_size = tag.entry.d_val
+            elif tag.entry.d_tag == 'DT_RELR':
+                relr_vaddr = tag.entry.d_val
+            elif tag.entry.d_tag == 'DT_RELRSZ':
+                relr_size = tag.entry.d_val
+            elif tag.entry.d_tag == 'DT_RELRENT':
+                relr_entsize = tag.entry.d_val
 
     # ---- relocation section bounds (used to resolve __rel_dyn_start etc) ----
     reld = ef.get_section_by_name('.rela.dyn')
@@ -128,6 +196,27 @@ def load_elf(path, base):
                 'sym': reloc['r_info_sym'],
                 'type': reloc['r_info_type'],
                 'addend': reloc['r_addend'],
+            })
+
+    # ---- DT_RELR: compact relative-relocation bitmap (newer builds only) ----
+    if relr_vaddr is not None and relr_size:
+        if relr_entsize not in (None, 8):
+            raise ValueError(f"unexpected DT_RELRENT {relr_entsize} (expected 8)")
+        foff = _file_offset_for_vaddr(ef, relr_vaddr)
+        raw = data[foff:foff + relr_size]
+        words = struct.unpack(f'<{relr_size // 8}Q', raw)
+        for target_vaddr in _decode_relr(words):
+            # Implicit addend: whatever value the linker already left sitting
+            # at this word in the file image (identical in spirit to a
+            # R_AARCH64_RELATIVE entry's explicit r_addend, just not spelled
+            # out in a relocation record).
+            addend_off = _file_offset_for_vaddr(ef, target_vaddr)
+            addend = struct.unpack_from('<Q', data, addend_off)[0]
+            info.relocations.append({
+                'offset': target_vaddr,
+                'sym': 0,
+                'type': R_AARCH64_RELATIVE,
+                'addend': addend,
             })
 
     return info

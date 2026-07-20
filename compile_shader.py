@@ -4,11 +4,37 @@ Compile a GLSL shader with glslc.elf, entirely in Python,
 by emulating the AArch64 binary with Unicorn.
 
 Usage:
-    python compile_shader.py glslc.elf shaders/example.frag --stage fragment
-    python compile_shader.py glslc.elf shaders/example.frag --stage fragment --debug
-    python compile_shader.py glslc.elf shaders/example.frag --stage fragment -o out.bin
+    python compile_shader.py glslc.elf shaders/example.frag:fragment
+    python compile_shader.py glslc.elf shaders/example.frag:fragment --debug
+    python compile_shader.py glslc.elf shaders/example.frag:fragment -o out.bin
+
+    # multiple shaders in one call, ";"-separated -- independent compiles
+    # by default, or linked into one program with --no-glsl-separable:
+    python compile_shader.py glslc.elf "a.vert:vertex;a.frag:fragment" --no-glsl-separable -o out.bin
+
+This mirrors the C++ example:
+
+    std::vector<const char *> shaderSources;
+    std::vector<NVNshaderStage> shaderStages;
+    shaderSources.push_back(source);
+    shaderStages.push_back(NVN_SHADER_STAGE_FRAGMENT);
+    GLSLCcompileObject m_CompileObject{};
+    glslcInitialize(&m_CompileObject);
+    GLSLCoptions *options = &(m_CompileObject.options);
+    options->optionFlags.outputAssembly = true;
+    options->optionFlags.outputGpuBinaries = true;
+    options->optionFlags.glslSeparable = true;
+    options->optionFlags.outputPerfStats = true;
+    options->optionFlags.outputShaderReflection = true;
+    options->optionFlags.outputDebugInfo = GLSLC_DEBUG_LEVEL_G0;
+    m_CompileObject.input.sources = &shaderSources[0];
+    m_CompileObject.input.stages = &shaderStages[0];
+    m_CompileObject.input.count = shaderSources.size();
+    if (!glslcCompile(&m_CompileObject)) { ...fail... }
+    glslcFinalize(&m_CompileObject);
 """
 import argparse
+import os
 import sys
 
 from nx_emu.emu_core import Emulator, EmulatorError, GuestExit
@@ -47,24 +73,65 @@ WARN_UNINIT_NAMES = {
 }
 
 
+def parse_shader_spec(spec):
+    """Parse "path:stage[;path:stage...]" into [(path, stage_name), ...].
+
+    Splits entries on ';' and, within each entry, splits on the *last*
+    ':' (rsplit, maxsplit=1) so a Windows-style drive-letter path like
+    "C:\\shaders\\a.vert:vertex" still separates into
+    ("C:\\shaders\\a.vert", "vertex") correctly.
+    """
+    entries = []
+    for chunk in spec.split(';'):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        if ':' not in chunk:
+            raise ValueError(f"'{chunk}' is missing a :stage suffix, e.g. 'a.vert:vertex'")
+        path, stage_name = chunk.rsplit(':', 1)
+        path, stage_name = path.strip(), stage_name.strip()
+        if stage_name not in STAGE_NAMES:
+            raise ValueError(f"unknown stage '{stage_name}' in '{chunk}' -- "
+                              f"choices are: {', '.join(STAGE_NAMES)}")
+        entries.append((path, stage_name))
+    if not entries:
+        raise ValueError("no shaders given")
+    if len(entries) > 6:
+        # glslc.elf itself rejects an input.count >= 7 (see build_input()'s
+        # docstring/assert in glslc_structs.py), so this can never work.
+        raise ValueError(f"{len(entries)} shaders given, but glslc.elf accepts at most 6 per call")
+    seen_stages = [s for _, s in entries]
+    dupes = {s for s in seen_stages if seen_stages.count(s) > 1}
+    if dupes:
+        # Confirmed by actually trying it: glslc.elf rejects this itself
+        # with "Can't have duplicate stages in the input GLSL source
+        # strings." -- checking for it here just fails fast instead of
+        # spinning up the emulator for a guaranteed rejection.
+        raise ValueError(f"duplicate stage(s) {sorted(dupes)} -- glslc.elf only accepts one shader per stage per call")
+    return entries
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('glslc_elf', help='path to glslc.elf')
-    ap.add_argument('shader_source', help='path to a .glsl/.frag/.vert source file')
-    ap.add_argument('--stage', choices=STAGE_NAMES, default='fragment')
-    ap.add_argument('-o', '--output', help='write the compiled shader data here '
-                     '(GLSLCoutput.dataOffset..dataOffset+size -- just the payload, no header/section table)')
-    ap.add_argument('--full-blob', action='store_true',
-                     help='write the complete GLSLCoutput struct to -o (headers + section table + data) '
-                          'instead of just the payload -- only useful if you enabled more than one output '
-                          'section (--output-shader-reflection etc.) and need the headers to tell them apart')
+    ap.add_argument('shaders', help=(
+        'one or more shaders to compile in the same call, as "path:stage" '
+        'entries separated by \';\' -- e.g. a single shader is just '
+        '"shaders/example.frag:fragment", multiple is '
+        '"a.vert:vertex;a.frag:fragment". Stage is one of: '
+        + ', '.join(STAGE_NAMES) + '. With the default --glsl-separable '
+        'each shader compiles independently; pass --no-glsl-separable to '
+        'link them together into one program instead (matching stages '
+        'must then agree on interfaces, or glslc will report a link error).'
+    ))
+    ap.add_argument('-o', '--output', help='write the compiled GLSLCoutput binary blob here')
     ap.add_argument('--debug', action='store_true', help='trace every stub call')
 
     # ---- GLSLCoptions.optionFlags (every bit in the header, one flag each) ----
     g = ap.add_argument_group('GLSLCoptionFlags (all default to the values glslcHelper.cpp used)')
     g.add_argument('--glsl-separable', action=argparse.BooleanOptionalAction, default=True)
     g.add_argument('--output-assembly', action=argparse.BooleanOptionalAction, default=False)
-    g.add_argument('--output-gpu-binaries', action=argparse.BooleanOptionalAction, default=True)
+    g.add_argument('--output-gpu-binaries', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--output-perf-stats', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--output-shader-reflection', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--output-thin-gpu-binaries', action=argparse.BooleanOptionalAction, default=True)
@@ -94,8 +161,17 @@ def main():
 
     args = ap.parse_args()
 
-    with open(args.shader_source, 'r', encoding='utf-8') as f:
-        source = f.read()
+    try:
+        shader_specs = parse_shader_spec(args.shaders)
+    except ValueError as e:
+        print(f"[!] {e}", file=sys.stderr)
+        return 1
+
+    sources = []
+    for path, stage_name in shader_specs:
+        with open(path, 'r', encoding='utf-8') as f:
+            sources.append(f.read())
+    stages = [STAGE_NAMES[stage_name] for _, stage_name in shader_specs]
 
     force_include_std_header = None
     if args.force_include_std_header_file:
@@ -105,6 +181,9 @@ def main():
     print(f"[*] loading {args.glslc_elf} ...")
     emu = Emulator(args.glslc_elf, debug=args.debug)
     print("[*] module loaded, relocated, constructors run")
+    link_note = " (will be linked together)" if not args.glsl_separable and len(shader_specs) > 1 else ""
+    for path, stage_name in shader_specs:
+        print(f"    - {path} [{stage_name}]{link_note}")
 
     glslcInitialize = emu.symbols['glslcInitialize']
     glslcCompile = emu.symbols['glslcCompile']
@@ -176,14 +255,14 @@ def main():
         # plain-text source files, but build_input() itself accepts them;
         # see its docstring in nx_emu/glslc_structs.py if you're compiling
         # from SPIR-V and calling build_input() directly from your own code.
-        input_bytes = gs.build_input(emu, sources=[source], stages=[STAGE_NAMES[args.stage]])
+        input_bytes = gs.build_input(emu, sources=sources, stages=stages)
         emu.write_bytes(compile_obj + gs.CO_OFF_OPTIONS, options_bytes)
         emu.write_bytes(compile_obj + gs.CO_OFF_INPUT, input_bytes)
 
         print("[*] glslcCompile ...")
         ok = emu.call_guest_function(glslcCompile, [compile_obj])
 
-        success, info_log, output_blob, full_blob = gs.read_compile_results(emu, compile_obj)
+        success, info_log, output_blob = gs.read_compile_results(emu, compile_obj)
         if info_log:
             print("---- compiler info log ----")
             print(info_log)
@@ -196,14 +275,36 @@ def main():
 
         print("[+] compilation succeeded.")
         if output_blob is not None:
-            print(f"[+] compiled shader data: {len(output_blob)} bytes "
-                  f"(full GLSLCoutput struct: {len(full_blob)} bytes)")
+            print(f"[+] compiled GLSLCoutput blob: {len(output_blob)} bytes")
+            parsed = gs.parse_glslc_output(output_blob)
+            print(f"    (of which {parsed['dataOffset']} bytes are GLSLCoutput header/section-table, "
+                  f"{parsed['numSections']} section(s) follow)")
+            for sec in parsed['sections']:
+                extra = f" stage={sec['stage_name']}" if 'stage_name' in sec else ""
+                print(f"      [{sec['type_name']}]{extra} {sec['size']} bytes @ offset {sec['data_offset']}")
+
             if args.output:
-                to_write = full_blob if args.full_blob else output_blob
                 with open(args.output, 'wb') as f:
-                    f.write(to_write)
-                print(f"[+] wrote {args.output} ({len(to_write)} bytes, "
-                      f"{'full struct' if args.full_blob else 'shader data only'})")
+                    f.write(output_blob)
+                print(f"[+] wrote {args.output}  (full GLSLCoutput container -- header + all sections)")
+
+                base, _ = os.path.splitext(args.output)
+                # parse_shader_spec() already rejects duplicate stages (and
+                # glslc.elf would reject them too), so stage_name is unique
+                # per GPU_CODE section here -- no filename collisions.
+                for sec in parsed['sections']:
+                    if sec['type'] != gs.GLSLC_SECTION_TYPE_GPU_CODE:
+                        continue
+                    code_path = f"{base}.{sec['stage_name']}.code.bin"
+                    control_path = f"{base}.{sec['stage_name']}.control.bin"
+                    with open(code_path, 'wb') as f:
+                        f.write(sec['code'])
+                    with open(control_path, 'wb') as f:
+                        f.write(sec['control'])
+                    print(f"[+] wrote {code_path}  ({len(sec['code'])} bytes -- just the GPU machine code, "
+                          f"no container/header bytes)")
+                    print(f"[+] wrote {control_path}  ({len(sec['control'])} bytes -- the NVN control segment "
+                          f"that has to accompany the code)")
 
         print("[*] glslcFinalize ...")
         emu.call_guest_function(glslcFinalize, [compile_obj])
