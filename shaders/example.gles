@@ -1,0 +1,32 @@
+#version 300 es
+// GLES 3.0 fragment shader: one pass of a separable 5-tap Gaussian blur.
+// Run twice (uDirection = (1,0) then (0,1)) for a full blur.
+precision highp float;
+
+in vec2 vUV;
+uniform sampler2D uTexture;
+
+layout(std140) uniform BlurParams {
+    vec2 uTexelSize;  // 1.0 / texture size, in pixels
+    vec2 uDirection;  // (1,0) for horizontal pass, (0,1) for vertical pass
+};
+
+out vec4 fragColor;
+
+void main() {
+    float weights[5];
+    weights[0] = 0.227027;
+    weights[1] = 0.1945946;
+    weights[2] = 0.1216216;
+    weights[3] = 0.054054;
+    weights[4] = 0.016216;
+
+    vec3 result = texture(uTexture, vUV).rgb * weights[0];
+    for (int i = 1; i < 5; ++i) {
+        vec2 offset = uDirection * uTexelSize * float(i);
+        result += texture(uTexture, vUV + offset).rgb * weights[i];
+        result += texture(uTexture, vUV - offset).rgb * weights[i];
+    }
+
+    fragColor = vec4(result, 1.0);
+}
