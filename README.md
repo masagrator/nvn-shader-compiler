@@ -10,6 +10,8 @@ This repository is used to run glslc included with some Nintendo Switch games lo
 | 17.21.0.88 | 1.16 | Cave Story+ 1.3 | subsdk0 |
 | 17.24.0.113 | 1.16 | Tomb Raider Definitive Edition 1.0.3 | subsdk0 |
 
+shader version cannot be newer than what game supports, NVN is backwards compatible so you can use old shader version with newer versions of NVN.
+
 ## Setup
 
 Python 3.x is required. Additional python packages are required, you can install them like this:
