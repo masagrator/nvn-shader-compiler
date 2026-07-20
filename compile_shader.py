@@ -1,5 +1,43 @@
 #!/usr/bin/env python3
+"""
+Compile a GLSL shader with glslc.elf, entirely in Python,
+by emulating the AArch64 binary with Unicorn.
 
+Usage:
+    python compile_shader.py glslc.elf shaders/example.frag:fragment
+    python compile_shader.py glslc.elf shaders/example.frag:fragment --debug
+    python compile_shader.py glslc.elf shaders/example.frag:fragment -o out.bin
+
+    # multiple shaders in one call, ";"-separated -- independent compiles
+    # by default, or linked into one program with --no-glsl-separable:
+    python compile_shader.py glslc.elf "a.vert:vertex;a.frag:fragment" --no-glsl-separable -o out.bin
+
+    # compile from a real (binary) SPIR-V module instead of GLSL text --
+    # entry point defaults to "main" for every module, override with
+    # --spirv-entry-point if yours differs:
+    python compile_shader.py glslc.elf shaders/example.frag.spv:fragment --language spirv -o out.bin
+
+This mirrors the C++ example:
+
+    std::vector<const char *> shaderSources;
+    std::vector<NVNshaderStage> shaderStages;
+    shaderSources.push_back(source);
+    shaderStages.push_back(NVN_SHADER_STAGE_FRAGMENT);
+    GLSLCcompileObject m_CompileObject{};
+    glslcInitialize(&m_CompileObject);
+    GLSLCoptions *options = &(m_CompileObject.options);
+    options->optionFlags.outputAssembly = true;
+    options->optionFlags.outputGpuBinaries = true;
+    options->optionFlags.glslSeparable = true;
+    options->optionFlags.outputPerfStats = true;
+    options->optionFlags.outputShaderReflection = true;
+    options->optionFlags.outputDebugInfo = GLSLC_DEBUG_LEVEL_G0;
+    m_CompileObject.input.sources = &shaderSources[0];
+    m_CompileObject.input.stages = &shaderStages[0];
+    m_CompileObject.input.count = shaderSources.size();
+    if (!glslcCompile(&m_CompileObject)) { ...fail... }
+    glslcFinalize(&m_CompileObject);
+"""
 import argparse
 import os
 import sys
@@ -119,7 +157,7 @@ def main():
     g.add_argument('--enable-warp-culling', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--enable-multithread-compilation', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--language', choices=LANGUAGE_NAMES, default='glsl')
-    g.add_argument('--debug-level', choices=DEBUG_LEVEL_NAMES, default='g0')
+    g.add_argument('--debug-level', choices=DEBUG_LEVEL_NAMES, default='none')
     g.add_argument('--spill-control', choices=SPILL_NAMES, default='default')
     g.add_argument('--opt-level', choices=OPTLEVEL_NAMES, default='default')
     g.add_argument('--unroll-control', choices=UNROLL_NAMES, default='default')
@@ -135,6 +173,15 @@ def main():
                      help='#include search path (repeatable)')
     g2.add_argument('--xfb-varying', action='append', default=[],
                      help='transform-feedback varying name (repeatable)')
+
+    # ---- GLSLCinput fields that only matter for --language spirv ----
+    g3 = ap.add_argument_group('SPIR-V input (only used when --language spirv)')
+    g3.add_argument('--spirv-entry-point', default='main', help=(
+        'entry point name, applied to every SPIR-V module in this call '
+        '(default: main). All modules in one call share this same name -- '
+        'if you need a different entry point per module, call '
+        'nx_emu.glslc_structs.build_input() directly instead.'
+    ))
 
     args = ap.parse_args()
 
@@ -156,9 +203,23 @@ def main():
 
     sources = []
     for path, stage_name in shader_specs:
-        with open(path, 'r', encoding='utf-8') as f:
-            sources.append(f.read())
+        if args.language == 'spirv':
+            # SPIR-V is binary and can legally contain embedded zero words,
+            # so it can't be opened as text (would either throw
+            # UnicodeDecodeError on non-UTF-8 bytes, or truncate at a null
+            # word if it somehow decoded) -- read raw bytes instead. See
+            # build_input()'s docstring: bytes sources are written verbatim,
+            # str sources are NUL-terminated C strings.
+            with open(path, 'rb') as f:
+                sources.append(f.read())
+        else:
+            with open(path, 'r', encoding='utf-8') as f:
+                sources.append(f.read())
     stages = [STAGE_NAMES[stage_name] for _, stage_name in shader_specs]
+
+    if args.language == 'spirv':
+        print(f"[*] read {len(sources)} shader(s) as binary SPIR-V "
+              f"(entry point '{args.spirv_entry_point}')")
 
     force_include_std_header = None
     if args.force_include_std_header_file:
@@ -255,13 +316,23 @@ def main():
             include_paths=args.include_path,
             xfb_varyings=args.xfb_varying,
         )
-        # spirv_entry_point_names / spirv_module_sizes / spirv_spec_info
-        # only apply when --language spirv is used with binary (bytes)
-        # sources -- not wired to the CLI since this script only ever reads
-        # plain-text source files, but build_input() itself accepts them;
-        # see its docstring in nx_emu/glslc_structs.py if you're compiling
-        # from SPIR-V and calling build_input() directly from your own code.
-        input_bytes = gs.build_input(emu, sources=sources, stages=stages)
+        # spirv_entry_point_names/spirv_module_sizes are required by
+        # glslc.elf whenever options.language is GLSLC_LANGUAGE_SPIRV (see
+        # build_input()'s docstring) -- one entry point name and one byte
+        # length per SPIR-V module, all sourced from --spirv-entry-point
+        # and the sources themselves. Left as None for GLSL/GLES, where
+        # they don't apply and sources rely on NUL-termination instead.
+        if args.language == 'spirv':
+            spirv_entry_point_names = [args.spirv_entry_point] * len(sources)
+            spirv_module_sizes = [len(s) for s in sources]
+        else:
+            spirv_entry_point_names = None
+            spirv_module_sizes = None
+        input_bytes = gs.build_input(
+            emu, sources=sources, stages=stages,
+            spirv_entry_point_names=spirv_entry_point_names,
+            spirv_module_sizes=spirv_module_sizes,
+        )
         emu.write_bytes(compile_obj + gs.CO_OFF_OPTIONS, options_bytes)
         emu.write_bytes(compile_obj + gs.CO_OFF_INPUT, input_bytes)
 
