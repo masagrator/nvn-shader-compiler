@@ -26,7 +26,7 @@ You need to get `glslc` from somewhere, for example from listed games above. It 
 ## Run
 
 ```
-python compile_shader.py glslc.elf shaders/example.frag --stage fragment -o out.bin
+python compile_shader.py glslc.elf shaders/example.frag:fragment -o out.bin
 ```
 
 Add `--debug` to see every imported-function call (name + first 4 args)
@@ -38,8 +38,7 @@ for when things went wrong.
 
 Some of those options were not tested or implemented fully.
 ```
-usage: compile_shader.py [-h] [--stage {vertex,fragment,geometry,tess_control,tess_evaluation,compute}] [-o OUTPUT]
-                         [--full-blob] [--debug] [--glsl-separable | --no-glsl-separable]
+usage: compile_shader.py [-h] [-o OUTPUT] [--debug] [--glsl-separable | --no-glsl-separable]
                          [--output-gpu-binaries | --no-output-gpu-binaries]
                          [--output-perf-stats | --no-output-perf-stats]
                          [--output-shader-reflection | --no-output-shader-reflection]
@@ -56,8 +55,7 @@ usage: compile_shader.py [-h] [--stage {vertex,fragment,geometry,tess_control,te
                          [--fast-math-mask FAST_MATH_MASK]
                          [--force-include-std-header-file FORCE_INCLUDE_STD_HEADER_FILE] [--include-path INCLUDE_PATH]
                          [--xfb-varying XFB_VARYING]
-                         glslc_elf shader_source
-
+                         glslc_elf shaders
 ```
 
 Default settings:
@@ -65,28 +63,29 @@ Default settings:
 --glsl-separable --output-thin-gpu-binaries --language glsl --debug-level g0 --opt-level default --fast-math-mask 1
 ```
 
-Usage:
+Example usage:
 ```
-    python compile_shader.py glslc.elf shaders/example.frag --stage fragment
-    python compile_shader.py glslc.elf shaders/example.frag --stage fragment --debug
-    python compile_shader.py glslc.elf shaders/example.frag --stage fragment -o out.bin
+    python compile_shader.py glslc.elf shaders/example.frag:fragment
+    python compile_shader.py glslc.elf shaders/example.frag:fragment --debug
+    python compile_shader.py glslc.elf shaders/example.frag:fragment -o out.bin
+    python compile_shader.py glslc.elf "shaders/example.vert:vertex;shaders/example.frag:fragment" --no-glsl-separable -o out.bin
 ```
 
 positional arguments:
 ```
   glslc_elf             path to glslc.elf
-  shader_source         path to a .glsl/.frag/.vert source file
+  shaders               one or more shaders to compile in the same call, as "path:stage" entries separated by ';' --
+                        e.g. a single shader is just "shaders/example.frag:fragment", multiple is
+                        "a.vert:vertex;a.frag:fragment". Stage is one of: vertex, fragment, geometry, tess_control,
+                        tess_evaluation, compute. With the default --glsl-separable each shader compiles
+                        independently; pass --no-glsl-separable to link them together into one program instead
+                        (matching stages must then agree on interfaces, or glslc will report a link error).
 ```
 
 options:
 ```
   -h, --help            show this help message and exit
-  --stage {vertex,fragment,geometry,tess_control,tess_evaluation,compute}
-  -o, --output OUTPUT   write the compiled shader data here (GLSLCoutput.dataOffset..dataOffset+size -- just the
-                        payload, no header/section table)
-  --full-blob           write the complete GLSLCoutput struct to -o (headers + section table + data) instead of just
-                        the payload -- only useful if you enabled more than one output section (--output-shader-
-                        reflection etc.) and need the headers to tell them apart
+  -o, --output OUTPUT   write the compiled GLSLCoutput binary blob here
   --debug               trace every stub call
 ```
 
