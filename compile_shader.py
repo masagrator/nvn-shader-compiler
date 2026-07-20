@@ -358,10 +358,7 @@ def main():
                         reflection_path = f"{base}.reflection{suffix}.bin"
                         with open(reflection_path, 'wb') as f:
                             f.write(sec['data'])
-                        print(f"[+] wrote {reflection_path}  ({len(sec['data'])} bytes -- raw "
-                              f"GLSLCprogramReflectionHeader section, whole program: uniform/uniform-block, "
-                              f"SSBO, program input/output, and xfb-varying reflection data; see "
-                              f"glslcinterface.h for its internal layout)")
+                        print(f"[+] wrote {reflection_path}  ({len(sec['data'])} bytes -- raw reflection segment)")
                         reflection_count += 1
 
         print("[*] glslcFinalize ...")
