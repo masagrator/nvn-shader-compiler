@@ -69,7 +69,7 @@ Example usage:
     python compile_shader.py glslc.elf shaders/example.frag:fragment
     python compile_shader.py glslc.elf shaders/example.frag:fragment --debug
     python compile_shader.py glslc.elf shaders/example.frag:fragment -o output/out.bin
-    python compile_shader.py glslc.elf "shaders/example.vert:vertex;shaders/example.frag:fragment" --no-glsl-separable -o out.bin
+    python compile_shader.py glslc.elf "shaders/example.vert:vertex;shaders/example.frag:fragment" --no-glsl-separable -o out.bin --output-shader-reflection
     python compile_shader.py glslc.elf "shaders/example.vert:vertex;shaders/example.tesc:tess_control;shaders/example.tese:tess_evaluation;shaders/example.geom:geometry;shaders/example.frag:fragment" --no-glsl-separable -o out.bin
 ```
 
