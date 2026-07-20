@@ -85,7 +85,7 @@ positional arguments:
 options:
 ```
   -h, --help            show this help message and exit
-  -o, --output OUTPUT   write the compiled GLSLCoutput binary blob here
+  -o, --output OUTPUT   write the compiled GLSLCoutput binary blob here, it will also output to the same folder code and control section of each shader as separate files
   --debug               trace every stub call
 ```
 
