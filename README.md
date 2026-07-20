@@ -85,9 +85,22 @@ positional arguments:
 
 options:
 ```
-  -h, --help            show this help message and exit
-  -o, --output OUTPUT   write the compiled GLSLCoutput binary blob here, it will also output to the same folder code and control section of each shader as separate files
-  --debug               trace every stub call
+  -h, --help
+        show this help message and exit
+  -o, --output OUTPUT
+        write the compiled GLSLCoutput binary blob here, it will also output to the same folder code and control section of each shader as separate files
+  --debug
+        trace every stub call
+  --no-glsl-separable
+        loaded shaders will be linked (allows better optimizations at the cost of being unusable in contexts of other shaders)
+  --output-gpu-binaries
+        output gpu code and control sections with data for Nintendo Switch, and also export data needed to compile shader at runtime on Windows when running game in NVN development environment
+  --output-thin-gpu-binaries
+        output gpu code and control sections with data for Nintendo Switch
+  --opt-level
+        optimization level, default means it's enabled at the level hardcoded in glslc
+  --debug-level
+        output DEBUG_INFO section with amount of details that depends on chosen level
 ```
 
 GLSLCoptions (forceIncludeStdHeader / includeInfo / xfbVaryingInfo):
