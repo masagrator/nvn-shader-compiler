@@ -4,11 +4,11 @@ This repository is used to run glslc included with some Nintendo Switch games lo
 
 # Supported glslc versions:
 
-| glslc version | shader version | Included with game |
+| glslc version | shader version | Included with game / as: |
 | --- | --- | --- |
-| 13.0.0.2 | 1.9 | Cave Story+ 1.0 |
-| 17.21.0.88 | 1.16 | Cave Story+ 1.3 |
-| 17.24.0.113 | 1.16 | Tomb Raider Definitive Edition 1.0.3 |
+| 13.0.0.2 | 1.9 | Cave Story+ 1.0 / subsdk1  |
+| 17.21.0.88 | 1.16 | Cave Story+ 1.3 / subsdk0 |
+| 17.24.0.113 | 1.16 | Tomb Raider Definitive Edition 1.0.3 / subsdk0 |
 
 ## Setup
 
