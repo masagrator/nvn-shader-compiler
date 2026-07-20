@@ -1,38 +1,5 @@
 #!/usr/bin/env python3
-"""
-Compile a GLSL shader with glslc.elf, entirely in Python,
-by emulating the AArch64 binary with Unicorn.
 
-Usage:
-    python compile_shader.py glslc.elf shaders/example.frag:fragment
-    python compile_shader.py glslc.elf shaders/example.frag:fragment --debug
-    python compile_shader.py glslc.elf shaders/example.frag:fragment -o out.bin
-
-    # multiple shaders in one call, ";"-separated -- independent compiles
-    # by default, or linked into one program with --no-glsl-separable:
-    python compile_shader.py glslc.elf "a.vert:vertex;a.frag:fragment" --no-glsl-separable -o out.bin
-
-This mirrors the C++ example:
-
-    std::vector<const char *> shaderSources;
-    std::vector<NVNshaderStage> shaderStages;
-    shaderSources.push_back(source);
-    shaderStages.push_back(NVN_SHADER_STAGE_FRAGMENT);
-    GLSLCcompileObject m_CompileObject{};
-    glslcInitialize(&m_CompileObject);
-    GLSLCoptions *options = &(m_CompileObject.options);
-    options->optionFlags.outputAssembly = true;
-    options->optionFlags.outputGpuBinaries = true;
-    options->optionFlags.glslSeparable = true;
-    options->optionFlags.outputPerfStats = true;
-    options->optionFlags.outputShaderReflection = true;
-    options->optionFlags.outputDebugInfo = GLSLC_DEBUG_LEVEL_G0;
-    m_CompileObject.input.sources = &shaderSources[0];
-    m_CompileObject.input.stages = &shaderStages[0];
-    m_CompileObject.input.count = shaderSources.size();
-    if (!glslcCompile(&m_CompileObject)) { ...fail... }
-    glslcFinalize(&m_CompileObject);
-"""
 import argparse
 import os
 import sys
@@ -140,11 +107,11 @@ def main():
     # ---- GLSLCoptions.optionFlags (every bit in the header, one flag each) ----
     g = ap.add_argument_group('GLSLCoptionFlags (all default to the values glslcHelper.cpp used)')
     g.add_argument('--glsl-separable', action=argparse.BooleanOptionalAction, default=True)
-    g.add_argument('--output-assembly', action=argparse.BooleanOptionalAction, default=True)
-    g.add_argument('--output-gpu-binaries', action=argparse.BooleanOptionalAction, default=True)
-    g.add_argument('--output-perf-stats', action=argparse.BooleanOptionalAction, default=True)
-    g.add_argument('--output-shader-reflection', action=argparse.BooleanOptionalAction, default=True)
-    g.add_argument('--output-thin-gpu-binaries', action=argparse.BooleanOptionalAction, default=False)
+    g.add_argument('--output-assembly', action=argparse.BooleanOptionalAction, default=False)
+    g.add_argument('--output-gpu-binaries', action=argparse.BooleanOptionalAction, default=False)
+    g.add_argument('--output-perf-stats', action=argparse.BooleanOptionalAction, default=False)
+    g.add_argument('--output-shader-reflection', action=argparse.BooleanOptionalAction, default=False)
+    g.add_argument('--output-thin-gpu-binaries', action=argparse.BooleanOptionalAction, default=True)
     g.add_argument('--tessellation-passthrough-gs', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--prioritize-consecutive-tex', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--error-on-scratch-mem-usage', action=argparse.BooleanOptionalAction, default=False)
@@ -170,6 +137,16 @@ def main():
                      help='transform-feedback varying name (repeatable)')
 
     args = ap.parse_args()
+
+    if args.output:
+        out_dir = os.path.dirname(args.output)
+        if out_dir and not os.path.isdir(out_dir):
+            try:
+                os.makedirs(out_dir, exist_ok=True)
+            except OSError as e:
+                print(f"[!] couldn't create output directory '{out_dir}': {e}", file=sys.stderr)
+                return 1
+            print(f"[*] created output directory '{out_dir}'")
 
     try:
         shader_specs = parse_shader_spec(args.shaders)
