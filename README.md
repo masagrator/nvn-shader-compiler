@@ -101,6 +101,7 @@ options:
         optimization level, default means it's enabled at the level hardcoded in glslc
   --debug-level
         output to main blob DEBUG_INFO section with amount of details that depends on chosen level
+        in case of spir-v, for this to work shader file itself must contain debug data, otherwise compilation will fail
 ```
 
 GLSLCoptions (forceIncludeStdHeader / includeInfo / xfbVaryingInfo):
