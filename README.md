@@ -4,13 +4,13 @@ This repository is used to run glslc included with some Nintendo Switch games lo
 
 # Supported glslc versions:
 
-| glslc version | shader version | Included with game | exefs filename |
+| GLSLC version | NVN version | Included with game | exefs filename |
 | --- | --- | --- | --- |
 | 13.0.0.2 | 1.9 | Cave Story+ 1.0 | subsdk1  |
 | 17.21.0.88 | 1.16 | Cave Story+ 1.3 | subsdk0 |
 | 17.24.0.113 | 1.16 | Tomb Raider Definitive Edition 1.0.3 | subsdk0 |
 
-"Shader version" cannot be newer than what game supports. NVN is backwards compatible, which means you can use old shader version with newer versions of NVN.
+"NVN version" cannot be newer than what game supports. NVN is backwards compatible, which means you can use files generated with old glslc in newer versions of NVN.
 
 ## Setup
 
