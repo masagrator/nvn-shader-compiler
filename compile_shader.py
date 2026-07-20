@@ -118,7 +118,7 @@ def main():
     g.add_argument('--enable-warp-culling', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--enable-multithread-compilation', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--language', choices=LANGUAGE_NAMES, default='glsl')
-    g.add_argument('--debug-level', choices=DEBUG_LEVEL_NAMES, default='g0')
+    g.add_argument('--debug-level', choices=DEBUG_LEVEL_NAMES, default='none')
     g.add_argument('--spill-control', choices=SPILL_NAMES, default='default')
     g.add_argument('--opt-level', choices=OPTLEVEL_NAMES, default='default')
     g.add_argument('--unroll-control', choices=UNROLL_NAMES, default='default')
