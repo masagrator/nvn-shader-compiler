@@ -59,7 +59,7 @@ usage: compile_shader.py [-h] [-o OUTPUT] [--debug] [--glsl-separable | --no-gls
 
 Default settings:
 ```
---glsl-separable --output-thin-gpu-binaries --language glsl --fast-math-mask 1 --spirv-entry-point main
+--glsl-separable --output-thin-gpu-binaries --language glsl --fast-math-mask 4 --spirv-entry-point main
 ```
 
 Example usage:
