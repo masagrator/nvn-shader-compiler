@@ -123,7 +123,7 @@ def main():
     g.add_argument('--opt-level', choices=OPTLEVEL_NAMES, default='default')
     g.add_argument('--unroll-control', choices=UNROLL_NAMES, default='default')
     g.add_argument('--warn-uninit', choices=WARN_UNINIT_NAMES, default='default')
-    g.add_argument('--fast-math-mask', type=lambda s: int(s, 0), default=0,
+    g.add_argument('--fast-math-mask', type=lambda s: int(s, 0), default=4,
                     help='6-bit mask, per-component fast-math enable (accepts 0x.. or decimal)')
 
     # ---- the rest of GLSLCoptions ----
