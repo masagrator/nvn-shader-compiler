@@ -92,7 +92,8 @@ options:
         to the same folder code and control section of each shader as separate files
   --epicsh
         write each shader's code+control sections merged into one file per stage, 
-        in epicshf format (u64 code size, code data, u64 control size, control data) introduced in uam-nvn. 
+        in epicshf format (u64 code size, code data, u64 control size, control data)
+        introduced in uam-nvn. 
         If this names a folder (no file extension, e.g. "output"), one 
         "<folder>/<stage>.epicshf" is written per compiled shader stage, e.g. 
         "output/vertex.epicshf" and "output/fragment.epicshf". If this names a specific 
