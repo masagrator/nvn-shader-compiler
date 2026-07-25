@@ -8,9 +8,9 @@ single-shot process):
     0x00100000 .. 0x00110000   STUB_REGION   landing pads for ~90 imported
                                               libc/NvOs/glslc_Alloc functions
     0x10000000 .. +module size MODULE        glslc.elf's PT_LOAD segments
-    0x40000000 .. +256MB       HEAP          bump allocator (malloc/new/
+    0x40000000 .. +2GB         HEAP          bump allocator (malloc/new/
                                               glslc_Alloc all draw from here)
-    0x50000000 .. +8MB         STACK         grows down from the top
+    0xD0000000 .. +8MB         STACK         grows down from the top
 
 Calling convention: standard AAPCS64. Integer/pointer args in X0-X7,
 double args in D0-D7, integer return in X0, double return in D0.
@@ -40,7 +40,7 @@ STUB_SLOT_SIZE = 0x10          # 16 bytes/slot, way more than the 4 we use
 MODULE_BASE = 0x10000000
 
 HEAP_BASE = 0x40000000
-HEAP_SIZE = 0x10000000         # 256MB, for heavier shaders it may require 2GB, change it then to 0x80000000
+HEAP_SIZE = 0x80000000         # Confirmed with heavier shaders that more than 1GB is necessary 
 
 STACK_BASE = 0xD0000000
 STACK_SIZE = 0x00800000        # 8MB
