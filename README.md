@@ -37,7 +37,8 @@ Put generated elf file to root of this repository.
 
 Some of those options were not tested or implemented fully.
 ```
-usage: compile_shader.py [-h] [-o OUTPUT] [--epicsh EPICSH] [--debug] [--glsl-separable | --no-glsl-separable]
+usage: compile_shader.py [-h] [-o OUTPUT] [--epicsh EPICSH] [--debug]
+                         [--glsl-separable | --no-glsl-separable]
                          [--output-gpu-binaries | --no-output-gpu-binaries]
                          [--output-perf-stats | --no-output-perf-stats]
                          [--output-shader-reflection | --no-output-shader-reflection]
@@ -75,12 +76,16 @@ Example usage:
 positional arguments:
 ```
   glslc_elf             path to glslc.elf
-  shaders               one or more shaders to compile in the same call, as "path:stage" entries separated by ';' --
-                        e.g. a single shader is just "shaders/example.frag:fragment", multiple is
-                        "a.vert:vertex;a.frag:fragment". Stage is one of: vertex, fragment, geometry, tess_control,
-                        tess_evaluation, compute. With the default --glsl-separable each shader compiles
-                        independently; pass --no-glsl-separable to link them together into one program instead
-                        (matching stages must then agree on interfaces, or glslc will report a link error).
+  shaders               one or more shaders to compile in the same call,
+                        as "path:stage" entries separated by ';' --
+                        e.g. a single shader is just "shaders/example.frag:fragment",
+                        multiple is "a.vert:vertex;a.frag:fragment". 
+                        Stage is one of: vertex, fragment, geometry, tess_control,
+                        tess_evaluation, compute. 
+                        With the default --glsl-separable each shader compiles independently;
+                        pass --no-glsl-separable to link them together into one program instead
+                        (matching stages must then agree on interfaces, 
+                        or glslc will report a link error).
 ```
 
 options:
