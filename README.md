@@ -59,7 +59,7 @@ usage: compile_shader.py [-h] [-o OUTPUT] [--debug] [--glsl-separable | --no-gls
 
 Default settings:
 ```
---glsl-separable --output-thin-gpu-binaries --language glsl --fast-math-mask 4 --spirv-entry-point main
+--glsl-separable --output-thin-gpu-binaries --language glsl --fast-math-mask 0x2 --spirv-entry-point main
 ```
 
 Example usage:
@@ -102,6 +102,9 @@ options:
         optimization level, default means it's enabled at the level hardcoded in glslc
   --debug-level
         output to main blob DEBUG_INFO section with amount of details that depends on chosen level
+  --fast-math-mask
+        which shader stages should have enabled fast math optimizations.
+        Vertex = 0x1, Fragment = 0x2, Geometry = 0x4, Tess Control = 0x8, Tess Evaluation = 0x10, Compute = 0x20
 ```
 
 GLSLCoptions (forceIncludeStdHeader / includeInfo / xfbVaryingInfo):
