@@ -47,7 +47,6 @@ usage: compile_shader.py [-h] [-o OUTPUT] [--debug] [--glsl-separable | --no-gls
                          [--error-on-scratch-mem-usage | --no-error-on-scratch-mem-usage]
                          [--enable-cbf-optimization | --no-enable-cbf-optimization]
                          [--enable-warp-culling | --no-enable-warp-culling]
-                         [--enable-multithread-compilation | --no-enable-multithread-compilation]
                          [--language {glsl,gles,spirv}] [--debug-level {none,g0,g1,g2}]
                          [--spill-control {default,no_spill}] [--opt-level {default,none}]
                          [--unroll-control {default,none,all}] [--warn-uninit {default,none,all}]
