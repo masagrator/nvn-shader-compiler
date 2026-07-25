@@ -106,7 +106,6 @@ def main():
     # ---- GLSLCoptions.optionFlags (every bit in the header, one flag each) ----
     g = ap.add_argument_group('GLSLCoptionFlags (all default to the values glslcHelper.cpp used)')
     g.add_argument('--glsl-separable', action=argparse.BooleanOptionalAction, default=True)
-    g.add_argument('--output-assembly', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--output-gpu-binaries', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--output-perf-stats', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--output-shader-reflection', action=argparse.BooleanOptionalAction, default=False)
@@ -256,7 +255,7 @@ def main():
             emu=emu,
             force_include_std_header=force_include_std_header,
             glslSeparable=args.glsl_separable,
-            outputAssembly=args.output_assembly,
+            outputAssembly=False,
             outputGpuBinaries=args.output_gpu_binaries,
             outputPerfStats=args.output_perf_stats,
             outputShaderReflection=args.output_shader_reflection,
