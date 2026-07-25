@@ -19,7 +19,7 @@ Minimum 2.5 GB of free RAM is required. It was tested with very heavy shaders th
 
 Would be nice to find glslc 17.xx with NVN 1.9.
 
-"NVN version" cannot be newer than what game supports. NVN is backwards compatible, which means you can use files generated with old glslc in newer versions of NVN.
+"NVN version" cannot be newer than what game supports. NVN is backwards compatible, which means you can use files generated with old glslc in newer versions of NVN. Older glslc versions may have bugs that were solved in newer versions.
 
 ## Setup
 
