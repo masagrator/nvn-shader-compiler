@@ -88,13 +88,27 @@ options:
   -h, --help
         show help message and exit
   -o, --output OUTPUT
-        write the compiled GLSLCoutput binary blob here, it will also output to the same folder code and control section of each shader as separate files
+        write the compiled GLSLCoutput binary blob here, it will also output
+        to the same folder code and control section of each shader as separate files
+  --epicsh
+        write each shader's code+control sections merged into one file per stage, 
+        in epicshf format (u64 code size, code data, u64 control size, control data) introduced in uam-nvn. 
+        If this names a folder (no file extension, e.g. "output"), one 
+        "<folder>/<stage>.epicshf" is written per compiled shader stage, e.g. 
+        "output/vertex.epicshf" and "output/fragment.epicshf". If this names a specific 
+        file instead (has a file extension, e.g. "output/out.bin"), exactly one shader 
+        must be compiled in this call and it is written straight to that path -- refuses
+        to run if more than one shader is being compiled, since there would be
+        nowhere to put the rest of them'
   --debug
         trace every stub call
   --no-glsl-separable
-        loaded shaders will be linked (allows better optimizations at the cost of being unusable in contexts of other shaders)
+        loaded shaders will be linked (allows better optimizations
+        at the cost of being unusable in contexts of other shaders)
   --output-gpu-binaries
-        output gpu code and control sections with data for Nintendo Switch, and also export data needed to compile shader at runtime on Windows when running game in NVN development environment
+        output gpu code and control sections with data for Nintendo Switch,
+        and also export data needed to compile shader at runtime on Windows
+        when running game in NVN development environment
   --output-thin-gpu-binaries
         output gpu code and control sections with data for Nintendo Switch
   --opt-level
@@ -102,8 +116,10 @@ options:
   --debug-level
         output to main blob DEBUG_INFO section with amount of details that depends on chosen level
   --fast-math-mask
-        which shader stages should have enabled fast math optimizations that may not correspond correctly to IEEE.
-        Vertex = 0x1, Fragment = 0x2, Geometry = 0x4, Tess Control = 0x8, Tess Evaluation = 0x10, Compute = 0x20
+        which shader stages should have enabled fast math optimizations
+        that may not correspond correctly to IEEE.
+        Vertex = 0x1, Fragment = 0x2, Geometry = 0x4, Tess Control = 0x8,
+        Tess Evaluation = 0x10, Compute = 0x20
 ```
 
 GLSLCoptions (forceIncludeStdHeader / includeInfo / xfbVaryingInfo):
