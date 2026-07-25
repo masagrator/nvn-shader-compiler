@@ -160,7 +160,6 @@ def main():
     g.add_argument('--error-on-scratch-mem-usage', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--enable-cbf-optimization', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--enable-warp-culling', action=argparse.BooleanOptionalAction, default=False)
-    g.add_argument('--enable-multithread-compilation', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--language', choices=LANGUAGE_NAMES, default='glsl')
     g.add_argument('--debug-level', choices=DEBUG_LEVEL_NAMES, default='none')
     g.add_argument('--spill-control', choices=SPILL_NAMES, default='default')
@@ -168,7 +167,7 @@ def main():
     g.add_argument('--unroll-control', choices=UNROLL_NAMES, default='default')
     g.add_argument('--warn-uninit', choices=WARN_UNINIT_NAMES, default='default')
     g.add_argument('--fast-math-mask', type=lambda s: int(s, 0), default=(1 << gs.NVN_SHADER_STAGE_FRAGMENT),
-                    help='6-bit mask, per-component fast-math enable (accepts 0x.. or decimal)')
+                    help='6-bit mask, per-component fast-math enable. Vertex = 0x1, Fragment = 0x2\nGeometry = 0x4, Tess Control = 0x8, Tess Evaluation = 0x10, Compute = 0x20')
 
     # ---- the rest of GLSLCoptions ----
     g2 = ap.add_argument_group('GLSLCoptions (forceIncludeStdHeader / includeInfo / xfbVaryingInfo)')
@@ -319,7 +318,7 @@ def main():
             emu=emu,
             force_include_std_header=force_include_std_header,
             glslSeparable=args.glsl_separable,
-            outputAssembly=False,
+            outputAssembly=False, # This is not included with NX version of glslc, enabling it will return error
             outputGpuBinaries=args.output_gpu_binaries,
             outputPerfStats=args.output_perf_stats,
             outputShaderReflection=args.output_shader_reflection,
@@ -329,7 +328,7 @@ def main():
             errorOnScratchMemUsage=args.error_on_scratch_mem_usage,
             enableCBFOptimization=args.enable_cbf_optimization,
             enableWarpCulling=args.enable_warp_culling,
-            enableMultithreadCompilation=args.enable_multithread_compilation,
+            enableMultithreadCompilation=False, # This is not included with NX version of glslc it seems as there are no multithreading code included, enabling it does nothing,
             language=LANGUAGE_NAMES[args.language],
             outputDebugInfo=DEBUG_LEVEL_NAMES[args.debug_level],
             spillControl=SPILL_NAMES[args.spill_control],
