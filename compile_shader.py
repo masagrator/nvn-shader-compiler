@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import os
+import struct
 import sys
 
 from nx_emu.emu_core import Emulator, EmulatorError, GuestExit
@@ -87,6 +88,40 @@ def parse_shader_spec(spec):
     return entries
 
 
+def epicsh_is_single_file(path):
+    """Decide whether an --epicsh argument names a single output file
+    (e.g. "output/out.bin") or a folder to write one "<stage>.epicshf"
+    file into per compiled shader (e.g. "output").
+
+    A path is treated as a folder unless it has a file extension --
+    "output" and "output/" are folders, "output/out.bin" is a single
+    file. An existing directory on disk is always a folder, even if its
+    name happens to contain a dot.
+    """
+    if os.path.isdir(path):
+        return False
+    _, ext = os.path.splitext(path)
+    return bool(ext)
+
+
+def write_epicshf(path, code, control):
+    """Write one shader's GPU code + NVN control sections in epicshf
+    format:
+
+        u64 code size
+        code data
+        u64 control size
+        control data
+
+    (all little-endian, sizes in bytes).
+    """
+    with open(path, 'wb') as f:
+        f.write(struct.pack('<Q', len(code)))
+        f.write(code)
+        f.write(struct.pack('<Q', len(control)))
+        f.write(control)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('glslc_elf', help='path to glslc.elf')
@@ -101,6 +136,16 @@ def main():
         'must then agree on interfaces, or glslc will report a link error).'
     ))
     ap.add_argument('-o', '--output', help='write the compiled GLSLCoutput binary blob here')
+    ap.add_argument('--epicsh', help=(
+        'write each shader\'s code+control sections merged into one file per stage, '
+        'in epicshf format (u64 code size, code data, u64 control size, control data). '
+        'If this names a folder (no file extension, e.g. "output"), one '
+        '"<folder>/<stage>.epicshf" is written per compiled shader stage, e.g. '
+        '"output/vertex.epicshf" and "output/fragment.epicshf". If this names a specific '
+        'file instead (has a file extension, e.g. "output/out.bin"), exactly one shader '
+        'must be compiled in this call and it is written straight to that path -- '
+        'refuses to run if more than one shader is being compiled, since there would be '
+        'nowhere to put the rest of them'))
     ap.add_argument('--debug', action='store_true', help='trace every stub call')
 
     # ---- GLSLCoptions.optionFlags (every bit in the header, one flag each) ----
@@ -115,6 +160,7 @@ def main():
     g.add_argument('--error-on-scratch-mem-usage', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--enable-cbf-optimization', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--enable-warp-culling', action=argparse.BooleanOptionalAction, default=False)
+    g.add_argument('--enable-multithread-compilation', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--language', choices=LANGUAGE_NAMES, default='glsl')
     g.add_argument('--debug-level', choices=DEBUG_LEVEL_NAMES, default='none')
     g.add_argument('--spill-control', choices=SPILL_NAMES, default='default')
@@ -122,7 +168,7 @@ def main():
     g.add_argument('--unroll-control', choices=UNROLL_NAMES, default='default')
     g.add_argument('--warn-uninit', choices=WARN_UNINIT_NAMES, default='default')
     g.add_argument('--fast-math-mask', type=lambda s: int(s, 0), default=(1 << gs.NVN_SHADER_STAGE_FRAGMENT),
-                    help='6-bit mask, per-component fast-math enable. Vertex = 0x1, Fragment = 0x2\nGeometry = 0x4, Tess Control = 0x8, Tess Evaluation = 0x10, Compute = 0x20')
+                    help='6-bit mask, per-component fast-math enable (accepts 0x.. or decimal)')
 
     # ---- the rest of GLSLCoptions ----
     g2 = ap.add_argument_group('GLSLCoptions (forceIncludeStdHeader / includeInfo / xfbVaryingInfo)')
@@ -159,6 +205,25 @@ def main():
     except ValueError as e:
         print(f"[!] {e}", file=sys.stderr)
         return 1
+
+    epicsh_single_file = False
+    if args.epicsh:
+        epicsh_single_file = epicsh_is_single_file(args.epicsh)
+        if epicsh_single_file and len(shader_specs) > 1:
+            print(f"[!] --epicsh '{args.epicsh}' names a single output file, but "
+                  f"{len(shader_specs)} shaders were given -- pass a folder instead "
+                  f"(e.g. --epicsh output) to compile more than one shader at once",
+                  file=sys.stderr)
+            return 1
+
+        epicsh_out_dir = os.path.dirname(args.epicsh) if epicsh_single_file else args.epicsh
+        if epicsh_out_dir and not os.path.isdir(epicsh_out_dir):
+            try:
+                os.makedirs(epicsh_out_dir, exist_ok=True)
+            except OSError as e:
+                print(f"[!] couldn't create --epicsh output directory '{epicsh_out_dir}': {e}", file=sys.stderr)
+                return 1
+            print(f"[*] created --epicsh output directory '{epicsh_out_dir}'")
 
     sources = []
     for path, stage_name in shader_specs:
@@ -254,7 +319,7 @@ def main():
             emu=emu,
             force_include_std_header=force_include_std_header,
             glslSeparable=args.glsl_separable,
-            outputAssembly=False, # This is not included with NX version of glslc, enabling it will return error
+            outputAssembly=False,
             outputGpuBinaries=args.output_gpu_binaries,
             outputPerfStats=args.output_perf_stats,
             outputShaderReflection=args.output_shader_reflection,
@@ -264,7 +329,7 @@ def main():
             errorOnScratchMemUsage=args.error_on_scratch_mem_usage,
             enableCBFOptimization=args.enable_cbf_optimization,
             enableWarpCulling=args.enable_warp_culling,
-            enableMultithreadCompilation=False, # This is not included with NX version of glslc it seems as there are no multithreading code included, enabling it does nothing
+            enableMultithreadCompilation=args.enable_multithread_compilation,
             language=LANGUAGE_NAMES[args.language],
             outputDebugInfo=DEBUG_LEVEL_NAMES[args.debug_level],
             spillControl=SPILL_NAMES[args.spill_control],
@@ -358,6 +423,30 @@ def main():
                             f.write(sec['data'])
                         print(f"[+] wrote {reflection_path}  ({len(sec['data'])} bytes -- raw reflection segment)")
                         reflection_count += 1
+
+            if args.epicsh:
+                # parse_shader_spec() already rejects duplicate stages, so
+                # stage_name is unique per GPU_CODE section here -- no
+                # filename collisions in folder mode.
+                gpu_code_sections = [sec for sec in parsed['sections']
+                                      if sec['type'] == gs.GLSLC_SECTION_TYPE_GPU_CODE]
+                if not gpu_code_sections:
+                    print("[!] --epicsh requested but the compiled output has no GPU_CODE "
+                          "section(s) to write -- nothing written", file=sys.stderr)
+                elif epicsh_single_file:
+                    sec = gpu_code_sections[0]
+                    write_epicshf(args.epicsh, sec['code'], sec['control'])
+                    print(f"[+] wrote {args.epicsh}  (epicshf: {len(sec['code'])}-byte code + "
+                          f"{len(sec['control'])}-byte control, [{sec['stage_name']}])")
+                else:
+                    for sec in gpu_code_sections:
+                        epicsh_path = os.path.join(args.epicsh, f"{sec['stage_name']}.epicshf")
+                        write_epicshf(epicsh_path, sec['code'], sec['control'])
+                        print(f"[+] wrote {epicsh_path}  (epicshf: {len(sec['code'])}-byte code + "
+                              f"{len(sec['control'])}-byte control)")
+        elif args.output or args.epicsh:
+            print("[!] compilation reported success but produced no GLSLCoutput blob -- "
+                  "nothing written for -o/--epicsh", file=sys.stderr)
 
         print("[*] glslcFinalize ...")
         emu.call_guest_function(glslcFinalize, [compile_obj])
