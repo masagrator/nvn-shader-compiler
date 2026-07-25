@@ -124,7 +124,7 @@ def main():
     g.add_argument('--unroll-control', choices=UNROLL_NAMES, default='default')
     g.add_argument('--warn-uninit', choices=WARN_UNINIT_NAMES, default='default')
     g.add_argument('--fast-math-mask', type=lambda s: int(s, 0), default=(1 << gs.NVN_SHADER_STAGE_FRAGMENT),
-                    help='6-bit mask, per-component fast-math enable (accepts 0x.. or decimal)')
+                    help='6-bit mask, per-component fast-math enable. Vertex = 0x1, Fragment = 0x2\nGeometry = 0x4, Tess Control = 0x8, Tess Evaluation = 0x10, Compute = 0x20')
 
     # ---- the rest of GLSLCoptions ----
     g2 = ap.add_argument_group('GLSLCoptions (forceIncludeStdHeader / includeInfo / xfbVaryingInfo)')
