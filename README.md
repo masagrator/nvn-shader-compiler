@@ -37,7 +37,7 @@ Put generated elf file to root of this repository.
 
 Some of those options were not tested or implemented fully.
 ```
-usage: compile_shader.py [-h] [-o OUTPUT] [--debug] [--glsl-separable | --no-glsl-separable]
+usage: compile_shader.py [-h] [-o OUTPUT] [--epicsh EPICSH][--debug] [--glsl-separable | --no-glsl-separable]
                          [--output-gpu-binaries | --no-output-gpu-binaries]
                          [--output-perf-stats | --no-output-perf-stats]
                          [--output-shader-reflection | --no-output-shader-reflection]
@@ -52,7 +52,7 @@ usage: compile_shader.py [-h] [-o OUTPUT] [--debug] [--glsl-separable | --no-gls
                          [--unroll-control {default,none,all}] [--warn-uninit {default,none,all}]
                          [--fast-math-mask FAST_MATH_MASK]
                          [--force-include-std-header-file FORCE_INCLUDE_STD_HEADER_FILE] [--include-path INCLUDE_PATH]
-                         [--xfb-varying XFB_VARYING] [--spirv-entry-point ENTRY_POINT]
+                         [--xfb-varying XFB_VARYING] [--spirv-entry-point SPIRV_ENTRY_POINT]
                          glslc_elf shaders
 ```
 
