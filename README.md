@@ -98,8 +98,7 @@ options:
         "output/vertex.epicshf" and "output/fragment.epicshf". If this names a specific 
         file instead (has a file extension, e.g. "output/out.bin"), exactly one shader 
         must be compiled in this call and it is written straight to that path -- refuses
-        to run if more than one shader is being compiled, since there would be
-        nowhere to put the rest of them'
+        to run if more than one shader is being compiled
   --debug
         trace every stub call
   --no-glsl-separable
