@@ -37,7 +37,7 @@ Put generated elf file to root of this repository.
 
 Some of those options were not tested or implemented fully.
 ```
-usage: compile_shader.py [-h] [-o OUTPUT] [--epicsh EPICSH][--debug] [--glsl-separable | --no-glsl-separable]
+usage: compile_shader.py [-h] [-o OUTPUT] [--epicsh EPICSH] [--debug] [--glsl-separable | --no-glsl-separable]
                          [--output-gpu-binaries | --no-output-gpu-binaries]
                          [--output-perf-stats | --no-output-perf-stats]
                          [--output-shader-reflection | --no-output-shader-reflection]
