@@ -121,7 +121,7 @@ options:
         at the cost of being unusable in contexts of other shaders)
   --output-gpu-binaries
         output gpu code and control sections with data for Nintendo Switch,
-        and also export data needed to compile shader at runtime on Windows
+        and also add NV IR into control data needed to compile shader at runtime on Windows
         when running game in NVN development environment
   --output-thin-gpu-binaries
         output gpu code and control sections with data for Nintendo Switch
