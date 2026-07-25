@@ -52,8 +52,10 @@ usage: compile_shader.py [-h] [-o OUTPUT] [--epicsh EPICSH] [--debug]
                          [--spill-control {default,no_spill}] [--opt-level {default,none}]
                          [--unroll-control {default,none,all}] [--warn-uninit {default,none,all}]
                          [--fast-math-mask FAST_MATH_MASK]
-                         [--force-include-std-header-file FORCE_INCLUDE_STD_HEADER_FILE] [--include-path INCLUDE_PATH]
-                         [--xfb-varying XFB_VARYING] [--spirv-entry-point SPIRV_ENTRY_POINT]
+                         [--force-include-std-header-file FORCE_INCLUDE_STD_HEADER_FILE]
+                         [--include-path INCLUDE_PATH]
+                         [--xfb-varying XFB_VARYING]
+                         [--spirv-entry-point SPIRV_ENTRY_POINT]
                          glslc_elf shaders
 ```
 
