@@ -103,7 +103,7 @@ options:
   --debug-level
         output to main blob DEBUG_INFO section with amount of details that depends on chosen level
   --fast-math-mask
-        which shader stages should have enabled fast math optimizations.
+        which shader stages should have enabled fast math optimizations that may not correspond correctly to IEEE.
         Vertex = 0x1, Fragment = 0x2, Geometry = 0x4, Tess Control = 0x8, Tess Evaluation = 0x10, Compute = 0x20
 ```
 
