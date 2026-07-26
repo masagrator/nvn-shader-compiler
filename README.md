@@ -100,10 +100,10 @@ positional arguments:
 options:
 ```
   -h, --help
-        show help message and exit
+        show help message and exit.
   -o, --output OUTPUT
         write the compiled GLSLCoutput binary blob here, it will also output
-        to the same folder code and control section of each shader as separate files
+        to the same folder code and control section of each shader as separate files.
   --epicsh
         write each shader's code+control sections merged into one file per stage, 
         in epicshf format (u64 code size, code data, u64 control size, control data)
@@ -113,22 +113,23 @@ options:
         "output/vertex.epicshf" and "output/fragment.epicshf". If this names a specific 
         file instead (has a file extension, e.g. "output/out.bin"), exactly one shader 
         must be compiled in this call and it is written straight to that path -- refuses
-        to run if more than one shader is being compiled
+        to run if more than one shader is being compiled.
   --debug
         trace every stub call
   --no-glsl-separable
         loaded shaders will be linked (allows better optimizations
-        at the cost of being unusable in contexts of other shaders)
+        at the cost of being unusable in contexts of other shaders).
   --output-gpu-binaries
         output gpu code and control sections with data for Nintendo Switch,
         and also add NV IR into control section needed to compile shader
-        at runtime on Windows when running game in NVN development environment
+        at runtime on Windows when running game in NVN development environment.
   --output-thin-gpu-binaries
-        output gpu code and control sections with data for Nintendo Switch
+        output gpu code and control sections with data for Nintendo Switch.
   --opt-level
-        optimization level, default means it's enabled at the level hardcoded in glslc
+        optimization level, 'default' means it's enabled at the level hardcoded in glslc.
+        when set to 'none' using loops generates bad IR output that ends in compilation error.
   --debug-level
-        output to main blob DEBUG_INFO section with amount of details that depends on chosen level
+        output to main blob DEBUG_INFO section with amount of details that depends on chosen level.
   --fast-math-mask
         which shader stages should have enabled fast math optimizations
         that may not correspond correctly to IEEE.
