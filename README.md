@@ -15,6 +15,7 @@ Minimum 2.5 GB of free RAM is required. It was tested with very heavy shaders th
 | 17.20 | 62 | 1.15 | A Hat in Time 1.0.0-1.0.4 | subsdk0 |
 | 17.20 | 68 | 1.15 | The Legend of Zelda: Link's Awakening 1.0.0-1.1.0 | subsdk0 |
 | 17.21 | 88 | 1.16 | Cave Story+ 1.3 | subsdk0 |
+| 17.22 | 94 | 1.16 | Nobunaga's Ambition: Awakening 1.0.0-1.1.1 | subsdk0 |
 | 17.24 | 102 | 1.16 | The Legend of Zelda: Echoes of Wisdom 1.0.0 | subsdk0 |
 | 17.24 | 113 | 1.16 | Tomb Raider Definitive Edition 1.0.3 | subsdk0 |
 
