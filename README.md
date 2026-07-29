@@ -19,7 +19,8 @@ Minimum 2.5 GB of free RAM is required. It was tested with very heavy shaders th
 | 17.24 | 102 | 1.16 | The Legend of Zelda: Echoes of Wisdom 1.0.0 | subsdk0 |
 | 17.24 | 113 | 1.16 | Tomb Raider Definitive Edition 1.0.3 | subsdk0 |
 
-"NVN version" cannot be newer than what game supports. NVN is backwards compatible, which means you can use files generated with old glslc in newer versions of NVN. Older glslc versions may have bugs that were solved in newer versions.
+"NVN version" cannot be newer than what game supports. NVN is backwards compatible, which means you can use files generated with old glslc in newer versions of NVN. Older glslc versions may have bugs that were solved in newer versions.<br>
+For example package 30 won't be able to compile shaders/example.tese while 102 has no issues with it.
 
 ## Setup
 
