@@ -10,7 +10,7 @@ Minimum 2.5 GB of free RAM is required. It was tested with very heavy shaders th
 
 | GLSLC version | Package version | NVN version | Included with game | exefs filename |
 | --- | --- | --- | --- | --- |
-| 13.0 | 2 | 1.9 | Cave Story+ 1.0 | subsdk1 |
+| 17.10 | 30 | 1.9 | Cave Story+ 1.0 | subsdk1 |
 | 17.16 | 51 | 1.14 | シークレットゲーム KILLER QUEEN 1.0.0-1.0.1 | subsdk1 |
 | 17.20 | 62 | 1.15 | A Hat in Time 1.0.0-1.0.4 | subsdk0 |
 | 17.20 | 68 | 1.15 | The Legend of Zelda: Link's Awakening 1.0.0-1.1.0 | subsdk0 |
