@@ -24,7 +24,7 @@ for i in range(len(files)):
     ENTRY = {}
     if (magic == 0x12345679):
         ENTRY["TYPE"] = "CODE"
-        ENTRY["STAGE"] = "COMPUTE"
+        ENTRY["SHADER_TYPE"] = "COMPUTE"
     elif (magic == 0x12345678):
         ENTRY["TYPE"] = "CODE"
         file.seek(0x30)
