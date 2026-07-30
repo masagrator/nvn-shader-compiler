@@ -168,7 +168,7 @@ for i in range(len(files)):
         unk_hash = file.read(8).hex().upper()
         ENTRY["CODE_HASH"] = code_hash
         ENTRY["CONTROL_HASH"] = control_hash
-        ENTRY["UNK_HASH"] = unk_hash
+        ENTRY["UNK_HASH"] = unk_hash # doesn't change when code doesn't change
     file.close()
     DATA[files[i]] = ENTRY
 
