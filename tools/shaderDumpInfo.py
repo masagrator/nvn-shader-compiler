@@ -1,12 +1,23 @@
-# provide as argument output folder, it will generate "DUMP.yaml" in working directory
+# provide as argument input folder, it will generate "DUMP.yaml" in working directory.
+# pass -o <output_folder> to instead dump one YAML file per input file into that folder
+# (the folder is created if it doesn't exist).
 
 import yaml
 import glob
 import sys
+import os
+import argparse
 
-files = glob.glob(f"{sys.argv[1]}/*.*")
+parser = argparse.ArgumentParser(description="Dump shader metadata from unpacked NVN shader files.")
+parser.add_argument("input_folder", help="Folder containing the unpacked shader files")
+parser.add_argument("-o", "--output-folder", dest="output_folder", default=None,
+                     help="If given, dump one YAML file per input file into this folder (created if missing), instead of a single DUMP.yaml")
+args = parser.parse_args()
 
-DATA = {}
+files = glob.glob(f"{args.input_folder}/*.*")
+
+if (args.output_folder is not None):
+    os.makedirs(args.output_folder, exist_ok=True)
 
 class GLSLC:
     SECTION_TYPE_GPU_CODE = 0
@@ -15,12 +26,47 @@ class GLSLC:
     SECTION_TYPE_REFLECTION = 3
     SECTION_TYPE_DEBUG_INFO = 4
 
-def double_quote_presenter(dumper, data):
-    """Force PyYAML to use double quotes ('"') for multiline strings."""
+def presenter2(dumper, data):
     if '\n' in data:
-        # The magic happens here with style='"'
         return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='|')
     return dumper.represent_scalar('tag:yaml.org,2002:str', data)
+
+def ProcessDebugInfo(file, section_offset):
+    RESULT = {}
+    pos = file.tell()
+    file.seek(section_offset)
+    magic = int.from_bytes(file.read(4), "little")
+    assert(magic == 0x65040891)
+    RESULT["TYPE"] = "DEBUG_INFO"
+    file.seek(section_offset + 0x30)
+    text_length = int.from_bytes(file.read(4), "little")
+    header_length = int.from_bytes(file.read(4), "little")
+    file.seek(section_offset + header_length)
+    text_bytes = file.read(text_length)
+    text = text_bytes.decode("utf-8", errors="replace")
+    # the embedded text uses \r\n (and sometimes lone \r) line endings, and some
+    # parts even contain literal (already-escaped) "\r\n" as four separate text
+    # characters. All of these need to become plain "\n" -- if we reintroduce
+    # actual \r bytes (as a previous version of this code did), YAML literal
+    # block style ('|') can't represent them and silently falls back to an
+    # escaped quoted string.
+    text = text.replace("\\r\\n", "\n")
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    # part of the embedded source is itself a C-string-escaped blob (also using
+    # literal "\t" for indentation) rather than raw control characters. Expand
+    # those to spaces rather than real tabs: YAML literal block style silently
+    # falls back to a quoted/escaped string if the content contains an actual
+    # tab character, same as it does for trailing whitespace or \r.
+    text = text.replace("\\t", "    ")
+    # the blob is a C-string; drop the trailing NUL terminator (and any other stray
+    # NULs), since those also break YAML literal block style
+    text = text.replace("\x00", "")
+    # YAML literal block style also gets silently abandoned (falling back to a
+    # quoted string) if any line has trailing whitespace, so strip it per-line.
+    text = "\n".join(line.rstrip() for line in text.split("\n"))
+    RESULT["SOURCE"] = text
+    file.seek(pos)
+    return RESULT
 
 def Process(magic, file):
     ENTRY = {}
@@ -186,11 +232,13 @@ def Process(magic, file):
             type = int.from_bytes(file.read(4), "little")
             if (type > GLSLC.SECTION_TYPE_DEBUG_INFO):
                 continue
-            if (type != GLSLC.SECTION_TYPE_GPU_CODE):
+            if (type == GLSLC.SECTION_TYPE_DEBUG_INFO):
+                ENTRY["DATA"].append(ProcessDebugInfo(file, offset))
+                continue
+            elif (type != GLSLC.SECTION_TYPE_GPU_CODE):
                 ENTRY3 = {}
                 match(type):
                     case GLSLC.SECTION_TYPE_ASM_DUMP: ENTRY3["TYPE"] = "ASM_DUMP"
-                    case GLSLC.SECTION_TYPE_DEBUG_INFO: ENTRY3["TYPE"] = "DEBUG_INFO"
                     case GLSLC.SECTION_TYPE_PERF_STATS: ENTRY3["TYPE"] = "PERF_STATS"
                     case GLSLC.SECTION_TYPE_REFLECTION: ENTRY3["TYPE"] = "REFLECTION"
                 ENTRY["DATA"].append(ENTRY3)
@@ -213,6 +261,16 @@ def Process(magic, file):
     return ENTRY
 
 
+yaml.add_representer(str, presenter2)
+yaml.add_representer(str, presenter2, Dumper=yaml.SafeDumper)
+
+# When dumping to a single DUMP.yaml, open it once up-front and stream each
+# file's entry into it as soon as it's processed, instead of building up the
+# whole DATA dict in memory and dumping it all at the end.
+dump_file = None
+if (args.output_folder is None):
+    dump_file = open("DUMP.yaml", "w", encoding="UTF-8")
+
 for i in range(len(files)):
     print(files[i])
     file = open(files[i], "rb")
@@ -222,11 +280,21 @@ for i in range(len(files)):
     file.seek(0)
     ENTRY = Process(magic, file)
     file.close()
-    DATA[files[i]] = ENTRY
 
-print("Dumping metadata...")
-yaml.add_representer(str, double_quote_presenter)
-yaml.add_representer(str, double_quote_presenter, Dumper=yaml.SafeDumper)
-file = open("DUMP.yaml", "w", encoding="UTF-8")
-yaml.safe_dump(DATA, file, sort_keys=False, default_flow_style=False)
-file.close()
+    if (args.output_folder is not None):
+        out_name = os.path.basename(files[i]) + ".yaml"
+        out_path = os.path.join(args.output_folder, out_name)
+        out_file = open(out_path, "w", encoding="UTF-8")
+        yaml.safe_dump({files[i]: ENTRY}, out_file, sort_keys=False, default_flow_style=False)
+        out_file.close()
+    else:
+        yaml.safe_dump({files[i]: ENTRY}, dump_file, sort_keys=False, default_flow_style=False)
+
+    # drop the reference now that it's written out, so it can be garbage collected
+    del ENTRY
+
+if (args.output_folder is None):
+    dump_file.close()
+    print("Dumped metadata to DUMP.yaml")
+else:
+    print(f"Dumped {len(files)} YAML files to {args.output_folder}")
