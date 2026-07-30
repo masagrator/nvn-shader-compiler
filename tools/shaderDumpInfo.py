@@ -8,6 +8,13 @@ files = glob.glob(f"{sys.argv[1]}/*.*")
 
 DATA = {}
 
+class GLSLC:
+    SECTION_TYPE_GPU_CODE = 0
+    SECTION_TYPE_ASM_DUMP = 1
+    SECTION_TYPE_PERF_STATS = 2
+    SECTION_TYPE_REFLECTION = 3
+    SECTION_TYPE_DEBUG_INFO = 4
+
 def double_quote_presenter(dumper, data):
     """Force PyYAML to use double quotes ('"') for multiline strings."""
     if '\n' in data:
@@ -15,19 +22,15 @@ def double_quote_presenter(dumper, data):
         return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='|')
     return dumper.represent_scalar('tag:yaml.org,2002:str', data)
 
-for i in range(len(files)):
-    file = open(files[i], "rb")
-    file.seek(0, 2)
-    file_size = file.tell()
-    file.seek(0)
-    magic = int.from_bytes(file.read(4), "little")
+def Process(magic, file):
     ENTRY = {}
+    base = file.tell()
     if (magic == 0x12345679):
         ENTRY["TYPE"] = "CODE"
         ENTRY["SHADER_TYPE"] = "COMPUTE"
     elif (magic == 0x12345678):
         ENTRY["TYPE"] = "CODE"
-        file.seek(0x30)
+        file.seek(base + 0x30)
         CommonWord0 = int.from_bytes(file.read(4), "little")
         ENTRY["SPH_TYPE"] = CommonWord0 & 0b11111
         match(ENTRY["SPH_TYPE"]):
@@ -68,7 +71,9 @@ for i in range(len(files)):
         ENTRY["RESERVED4"] = (CommonWord4 & 0b111100000000000000000000) >> 20
         ENTRY["STORE_REQ_END"] = (CommonWord4 & 0b11111111000000000000000000000000) >> 24
     elif (magic == 0x98761234):
+        #print("offset: 0x%x" % file.tell())
         ENTRY["TYPE"] = "CONTROL"
+        file.seek(4, 1)
         gpu_major = int.from_bytes(file.read(4), "little")
         gpu_minor = int.from_bytes(file.read(4), "little")
         ENTRY["NVN_VERSION"] = "%d.%d" % (gpu_major, gpu_minor)
@@ -82,18 +87,18 @@ for i in range(len(files)):
         glasm_size = int.from_bytes(file.read(4), "little")
         if (glasm_size > 0):
             pos = file.tell()
-            file.seek(glasm_offset)
+            file.seek(base + glasm_offset)
+            #print("glasm: 0x%x" % file.tell())
             text = file.read(glasm_size).decode("ascii")
             file.seek(pos)
             ENTRY["GLASM"] = text
         else:
             ENTRY["GLASM"] = None
-        file.seek(0x20)
+        file.seek(base + 0x20)
         unk_section_offset = int.from_bytes(file.read(4), "little")
         unk_section_size = int.from_bytes(file.read(4), "little") # always 0
         control_size = unk_section_offset + unk_section_size
-        assert(control_size == file_size)
-        file.seek(0x790)
+        file.seek(base + 0x790)
         flags = int.from_bytes(file.read(8), "little")
         ENTRY["FLAGS"] = []
         if (flags & 1 == 1):
@@ -144,7 +149,7 @@ for i in range(len(files)):
             ENTRY["FLAGS"].append("WARN-UNINIT_NONE")
         if (flags & 0x2000000000 == 0x2000000000):
             ENTRY["FLAGS"].append("WARN-UNINIT_ALL")
-        file.seek(0x714)
+        file.seek(base + 0x714)
         type = file.read(1)[0]
         match(type):
             case 0:
@@ -162,16 +167,64 @@ for i in range(len(files)):
             case _:
                 print("Unknown stage: %d!" % type)
                 sys.exit()
-        file.seek(0x7D0)
+        file.seek(base + 0x7D0)
         code_hash = file.read(8).hex().upper()
         control_hash = file.read(8).hex().upper()
         unk_hash = file.read(8).hex().upper()
         ENTRY["CODE_HASH"] = code_hash
         ENTRY["CONTROL_HASH"] = control_hash
         ENTRY["UNK_HASH"] = unk_hash # doesn't change when code doesn't change
+    elif (magic == 0x19866891):
+        ENTRY["TYPE"] = "OUTPUT"
+        ENTRY["DATA"] = []
+        file.seek(0x4C)
+        section_num = int.from_bytes(file.read(4), "little")
+        for i in range(section_num):
+            file.seek(0x90 + (i * 0x90))
+            size = int.from_bytes(file.read(4), "little")
+            offset = int.from_bytes(file.read(4), "little")
+            type = int.from_bytes(file.read(4), "little")
+            if (type > GLSLC.SECTION_TYPE_DEBUG_INFO):
+                continue
+            if (type != GLSLC.SECTION_TYPE_GPU_CODE):
+                ENTRY3 = {}
+                match(type):
+                    case GLSLC.SECTION_TYPE_ASM_DUMP: ENTRY3["TYPE"] = "ASM_DUMP"
+                    case GLSLC.SECTION_TYPE_DEBUG_INFO: ENTRY3["TYPE"] = "DEBUG_INFO"
+                    case GLSLC.SECTION_TYPE_PERF_STATS: ENTRY3["TYPE"] = "PERF_STATS"
+                    case GLSLC.SECTION_TYPE_REFLECTION: ENTRY3["TYPE"] = "REFLECTION"
+                ENTRY["DATA"].append(ENTRY3)
+                continue
+            file.seek(0x28, 1)
+            code_offset = int.from_bytes(file.read(4), "little")
+            file.seek(offset)
+            magic = int.from_bytes(file.read(4), "little")
+            file.seek(-4, 1)
+            ENTRY2 = []
+            ENTRY2.append(Process(magic, file))
+            file.seek(offset + code_offset)
+            #print("0x%x" % file.tell())
+            magic = int.from_bytes(file.read(4), "little")
+            file.seek(-4, 1)
+            ENTRY2.append(Process(magic, file))
+            ENTRY["DATA"].append(ENTRY2)
+    elif (magic == 0x19292919):
+        ENTRY["TYPE"] = "REFLECTION"
+    return ENTRY
+
+
+for i in range(len(files)):
+    print(files[i])
+    file = open(files[i], "rb")
+    magic = int.from_bytes(file.read(4), "little")
+    file.seek(0, 2)
+    file_size = file.tell()
+    file.seek(0)
+    ENTRY = Process(magic, file)
     file.close()
     DATA[files[i]] = ENTRY
 
+print("Dumping metadata...")
 yaml.add_representer(str, double_quote_presenter)
 yaml.add_representer(str, double_quote_presenter, Dumper=yaml.SafeDumper)
 file = open("DUMP.yaml", "w", encoding="UTF-8")
