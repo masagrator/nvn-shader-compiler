@@ -576,7 +576,8 @@ def read_compile_results(emu, compile_object_addr):
     output_blob = None
     if output_ptr:
         blob_size = emu.read_u32(output_ptr + OUTPUT_OFF_SIZE)
+        output_section_size = emu.read_u32(output_ptr + OUTPUT_OFF_DATA_OFFSET)
         if 0 < blob_size < (1 << 28):
-            output_blob = emu.read_bytes(output_ptr, blob_size)
+            output_blob = emu.read_bytes(output_ptr, blob_size + output_section_size)
 
     return success, info_log, output_blob
