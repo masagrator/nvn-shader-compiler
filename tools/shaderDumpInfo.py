@@ -162,6 +162,13 @@ for i in range(len(files)):
             case _:
                 print("Unknown stage: %d!" % type)
                 sys.exit()
+        file.seek(0x7D0)
+        code_hash = file.read(8).hex().upper()
+        control_hash = file.read(8).hex().upper()
+        unk_hash = file.read(8).hex().upper()
+        ENTRY["CODE_HASH"] = code_hash
+        ENTRY["CONTROL_HASH"] = control_hash
+        ENTRY["UNK_HASH"] = unk_hash
     file.close()
     DATA[files[i]] = ENTRY
 
