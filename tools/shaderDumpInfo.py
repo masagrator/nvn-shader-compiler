@@ -55,7 +55,7 @@ for i in range(len(files)):
         ENTRY["STREAM_OUT_MASK"] = CommonWord0 & 0b11110000000000000000000000000000 >> 28
         CommonWord1 = int.from_bytes(file.read(4), "little")
         CommonWord2 = int.from_bytes(file.read(4), "little")
-        ENTRY["SH_LOCAL_MEM"] = CommonWord1 & 0b111111111111111111111111 + ((CommonWord2 & 0b111111111111111111111111) << 24)
+        ENTRY["SH_LOCAL_MEM"] = CommonWord1 & 0b111111111111111111111111 + ((CommonWord2 & 0b111111111111111111111111) << 24) # Dunno if good
         ENTRY["PER_PATCH_ATTR_CNT"] = CommonWord1 & 0b11111111000000000000000000000000 >> 24
         ENTRY["THR_PER_INPUT_PRIM"] = CommonWord2 & 0b11111111000000000000000000000000 >> 24
         CommonWord3 = int.from_bytes(file.read(4), "little")
