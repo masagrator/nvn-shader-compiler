@@ -218,7 +218,7 @@ def Process(magic, file):
         glasm_hash = file.read(8).hex().upper()
         code_hash = file.read(8).hex().upper()
         ENTRY["CONTROL_HASH"] = control_hash
-        ENTRY["GLASM_HASH"] = glasm_hash # it doesn't change when GLASM is identical but control and code are different, it's possible that also this is a hash of source code
+        ENTRY["GLASM_HASH"] = glasm_hash # it doesn't change when GLASM is identical but control and code are different, it's possible that also this is a hash of source file
         ENTRY["CODE_HASH"] = code_hash
     elif (magic == 0x19866891):
         ENTRY["TYPE"] = "OUTPUT"
