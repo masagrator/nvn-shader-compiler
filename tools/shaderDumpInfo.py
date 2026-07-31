@@ -214,12 +214,12 @@ def Process(magic, file):
                 print("Unknown stage: %d!" % type)
                 sys.exit()
         file.seek(base + 0x7D0)
-        code_hash = file.read(8).hex().upper()
         control_hash = file.read(8).hex().upper()
-        unk_hash = file.read(8).hex().upper()
-        ENTRY["CODE_HASH"] = code_hash
+        glasm_hash = file.read(8).hex().upper()
+        code_hash = file.read(8).hex().upper()
         ENTRY["CONTROL_HASH"] = control_hash
-        ENTRY["UNK_HASH"] = unk_hash # doesn't change when code doesn't change
+        ENTRY["GLASM_HASH"] = glasm_hash # it doesn't change when GLASM is identical but control and code are different, it's possible that also this is a hash of source code
+        ENTRY["CODE_HASH"] = code_hash
     elif (magic == 0x19866891):
         ENTRY["TYPE"] = "OUTPUT"
         ENTRY["DATA"] = []
