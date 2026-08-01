@@ -48,6 +48,7 @@ Some of those options were not tested or implemented fully.
 usage: compile_shader.py [-h] [-o OUTPUT] [--epicsh EPICSH] [--debug]
                          [--glsl-separable | --no-glsl-separable]
                          [--output-gpu-binaries | --no-output-gpu-binaries]
+                         [--output-assembly | --no-output-assembly]
                          [--output-perf-stats | --no-output-perf-stats]
                          [--output-shader-reflection | --no-output-shader-reflection]
                          [--output-thin-gpu-binaries | --no-output-thin-gpu-binaries]
@@ -142,6 +143,9 @@ options:
         only use for it is to set flag in control section that such option was used.
         in case if binary will support this flag, script will fail because
         threading functions are not implemented into libc shim.
+  --output-assembly
+        it's stubbed in every tested Switch binary, you get a warning after compilation.
+        only use for it is to set flag in control section that such option was used.
 ```
 
 GLSLCoptions (forceIncludeStdHeader / includeInfo / xfbVaryingInfo):
