@@ -152,6 +152,7 @@ def main():
     g = ap.add_argument_group('GLSLCoptionFlags (all default to the values glslcHelper.cpp used)')
     g.add_argument('--glsl-separable', action=argparse.BooleanOptionalAction, default=True)
     g.add_argument('--output-gpu-binaries', action=argparse.BooleanOptionalAction, default=False)
+    g.add_argument('--output-assembly', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--output-perf-stats', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--output-shader-reflection', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--output-thin-gpu-binaries', action=argparse.BooleanOptionalAction, default=True)
@@ -160,6 +161,7 @@ def main():
     g.add_argument('--error-on-scratch-mem-usage', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--enable-cbf-optimization', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--enable-warp-culling', action=argparse.BooleanOptionalAction, default=False)
+    g.add_argument('--enable-multithreaded-compilation', action=argparse.BooleanOptionalAction, default=False)
     g.add_argument('--language', choices=LANGUAGE_NAMES, default='glsl')
     g.add_argument('--debug-level', choices=DEBUG_LEVEL_NAMES, default='none')
     g.add_argument('--spill-control', choices=SPILL_NAMES, default='default')
@@ -318,7 +320,7 @@ def main():
             emu=emu,
             force_include_std_header=force_include_std_header,
             glslSeparable=args.glsl_separable,
-            outputAssembly=False, # This is not included with NX version of glslc, enabling it will return error
+            outputAssembly=args.output_assembly, # This is not included with NX version of glslc, enabling it will return warning
             outputGpuBinaries=args.output_gpu_binaries,
             outputPerfStats=args.output_perf_stats,
             outputShaderReflection=args.output_shader_reflection,
@@ -328,7 +330,7 @@ def main():
             errorOnScratchMemUsage=args.error_on_scratch_mem_usage,
             enableCBFOptimization=args.enable_cbf_optimization,
             enableWarpCulling=args.enable_warp_culling,
-            enableMultithreadCompilation=False, # This is not included with NX version of glslc it seems as there are no multithreading code included, enabling it does nothing,
+            enableMultithreadCompilation=args.enable_multithreaded_compilation, # This is not included with NX version of glslc it seems as there are no multithreading code included, enabling it does nothing,
             language=LANGUAGE_NAMES[args.language],
             outputDebugInfo=DEBUG_LEVEL_NAMES[args.debug_level],
             spillControl=SPILL_NAMES[args.spill_control],
