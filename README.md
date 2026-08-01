@@ -56,6 +56,7 @@ usage: compile_shader.py [-h] [-o OUTPUT] [--epicsh EPICSH] [--debug]
                          [--error-on-scratch-mem-usage | --no-error-on-scratch-mem-usage]
                          [--enable-cbf-optimization | --no-enable-cbf-optimization]
                          [--enable-warp-culling | --no-enable-warp-culling]
+                         [---enable-multithread-compilation | --no-enable-multithread-compilation]
                          [--language {glsl,gles,spirv}] [--debug-level {none,g0,g1,g2}]
                          [--spill-control {default,no_spill}] [--opt-level {default,none}]
                          [--unroll-control {default,none,all}] [--warn-uninit {default,none,all}]
@@ -136,6 +137,9 @@ options:
         that may not correspond correctly to IEEE.
         Vertex = 0x1, Fragment = 0x2, Geometry = 0x4, Tess Control = 0x8,
         Tess Evaluation = 0x10, Compute = 0x20
+  --enable-multithread-compilation
+        it's stubbed in Switch binary, you get no warning and compiling is still single threaded.
+        only use for it is to set flag in control section that such option was used
 ```
 
 GLSLCoptions (forceIncludeStdHeader / includeInfo / xfbVaryingInfo):
