@@ -151,4 +151,4 @@ GLSLCoptions (forceIncludeStdHeader / includeInfo / xfbVaryingInfo):
 # Technical notes
 
 Found differences between specific glslc binaries:
-- Tomb Raider Definitive Edition 1.0.3 glslc next to using RELR instead of RELA also includes C++ exceptions which explains most of inflated size in comparison to older glslc releases. Additionally it includes some debug prints related to Switch 2 support, but actual code for generating shaders is not implemented.
+- 17.24-113 glslc next to using RELR instead of RELA also includes C++ exceptions which explains most of inflated size in comparison to older glslc releases. Additionally it includes some debug prints related to Switch 2 support, but actual code for generating shaders is not implemented.
