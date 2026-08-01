@@ -120,7 +120,7 @@ options:
   --debug
         trace every stub call
   --no-glsl-separable
-        loaded shaders will be linked (allows better optimizations
+        loaded shaders will be linked if possible (allows better optimizations
         at the cost of being unusable in contexts of other shaders).
   --output-gpu-binaries
         output gpu code and control sections with data for Nintendo Switch,
