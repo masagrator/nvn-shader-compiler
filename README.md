@@ -138,8 +138,10 @@ options:
         Vertex = 0x1, Fragment = 0x2, Geometry = 0x4, Tess Control = 0x8,
         Tess Evaluation = 0x10, Compute = 0x20
   --enable-multithread-compilation
-        it's stubbed in Switch binary, you get no warning and compiling is still single threaded.
-        only use for it is to set flag in control section that such option was used
+        it's stubbed in every tested Switch binary, you get no warning, compiling is still single threaded.
+        only use for it is to set flag in control section that such option was used.
+        in case if binary will support this flag, script will fail because
+        threading functions are not implemented into libc shim.
 ```
 
 GLSLCoptions (forceIncludeStdHeader / includeInfo / xfbVaryingInfo):
