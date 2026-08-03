@@ -214,12 +214,12 @@ def Process(magic, file):
                 print("Unknown stage: %d!" % type)
                 sys.exit()
         file.seek(base + 0x7D0)
-        unk_hash = file.read(8).hex().upper()
+        source_hash = file.read(8).hex().upper()
         glasm_hash = file.read(8).hex().upper()
         shader_hash = file.read(8).hex().upper()
-        ENTRY["UNK_HASH"] = unk_hash
-        ENTRY["GLASM_HASH"] = glasm_hash # it doesn't change when GLASM is identical but control and code are different, it's possible that also this is a hash of source file
-        ENTRY["SHADER_HASH"] = shader_hash
+        ENTRY["SOURCE_HASH"] = source_hash # This hash seems to be calculated after normalizing formatting as changing break lines only does nothing
+        ENTRY["GLASM_HASH"] = glasm_hash # it doesn't change when GLASM is identical but control and code are different
+        ENTRY["SHADER_HASH"] = shader_hash # It changes when control and/or code are changed
     elif (magic == 0x19866891):
         ENTRY["TYPE"] = "OUTPUT"
         ENTRY["DATA"] = []
