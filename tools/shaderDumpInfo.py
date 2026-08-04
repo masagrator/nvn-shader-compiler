@@ -218,7 +218,7 @@ def Process(magic, file):
         glasm_hash = file.read(8).hex().upper()
         shader_hash = file.read(8).hex().upper()
         ENTRY["SOURCE_HASH"] = source_hash # This hash seems to be calculated after normalizing formatting as changing break lines only does nothing
-        ENTRY["GLASM_HASH"] = glasm_hash # it doesn't change when GLASM is identical but control and code are different
+        ENTRY["GLASM_HASH"] = glasm_hash # it doesn't change when GLASM is identical but source code, control and code are different
         ENTRY["SHADER_HASH"] = shader_hash # It changes when control and/or code are changed
     elif (magic == 0x19866891):
         ENTRY["TYPE"] = "OUTPUT"
