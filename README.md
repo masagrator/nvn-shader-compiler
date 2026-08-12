@@ -162,4 +162,3 @@ GLSLCoptions (forceIncludeStdHeader / includeInfo / xfbVaryingInfo):
 # Technical notes
 
 - 17.24-113 glslc next to using RELR instead of RELA also includes C++ exceptions which explains most of inflated size in comparison to older glslc releases. Additionally it includes some debug prints related to Switch 2 support, but actual code for generating shaders is not implemented.
-- glslc has a flag for outputting assembly to text format, but it's stubbed in Switch binary and returns error. That's why in compile_shader.py it's hardcoded to False. There are strings related to printing it, so it's possible that by patching it properly it's possible to enable it back, though because its target is PC it may need additional patching related to writing it to separate file.
