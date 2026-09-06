@@ -7,6 +7,7 @@ import glob
 import sys
 import os
 import argparse
+import textwrap
 
 parser = argparse.ArgumentParser(description="Dump shader metadata from unpacked NVN shader files.")
 parser.add_argument("input_folder", help="Folder containing the unpacked shader files")
@@ -15,6 +16,16 @@ parser.add_argument("-o", "--output-folder", dest="output_folder", default=None,
 args = parser.parse_args()
 
 files = glob.glob(f"{args.input_folder}/*.*")
+
+def read_string(file_obj):
+    chars = []
+    while True:
+        char = file_obj.read(1)
+        if char == b'\x00' or not char:
+            break
+        chars.append(char)
+    
+    return b''.join(chars).decode("utf-8")
 
 if (args.output_folder is not None):
     os.makedirs(args.output_folder, exist_ok=True)
@@ -52,6 +63,7 @@ def ProcessDebugInfo(file, section_offset):
     # escaped quoted string.
     text = text.replace("\\r\\n", "\n")
     text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = text.replace("\\n", "\n")
     # part of the embedded source is itself a C-string-escaped blob (also using
     # literal "\t" for indentation) rather than raw control characters. Expand
     # those to spaces rather than real tabs: YAML literal block style silently
@@ -67,6 +79,26 @@ def ProcessDebugInfo(file, section_offset):
     RESULT["SOURCE"] = text
     file.seek(pos)
     return RESULT
+
+def ProcessAsmDump(file, section_offset):
+    RESULT = {}
+    pos = file.tell()
+    file.seek(section_offset)
+    RESULT["TYPE"] = "ASM_DUMP"
+    text = read_string(file)
+    text = text.replace("\\r\\n", "\n")
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = text.replace("\\n", "\n")
+    text = text.replace("\\t", "    ")
+    text = "\n".join(line[1:] if line.startswith("\t") else line
+                     for line in text.split("\n"))
+    text = text.replace("\x00", "")
+    text = text.replace("\t", "    ")
+    text = "\n".join(line.rstrip() for line in text.split("\n"))
+    RESULT["ASSEMBLY"] = text
+    file.seek(pos)
+    return RESULT
+
 
 def Process(magic, file):
     ENTRY = {}
@@ -214,12 +246,12 @@ def Process(magic, file):
                 print("Unknown stage: %d!" % type)
                 sys.exit()
         file.seek(base + 0x7D0)
-        source_hash = file.read(8).hex().upper()
+        control_hash = file.read(8).hex().upper()
         glasm_hash = file.read(8).hex().upper()
-        shader_hash = file.read(8).hex().upper()
-        ENTRY["SOURCE_HASH"] = source_hash # This hash seems to be calculated after normalizing formatting as changing break lines only does nothing
-        ENTRY["GLASM_HASH"] = glasm_hash # it doesn't change when GLASM is identical but source code, control and code are different
-        ENTRY["SHADER_HASH"] = shader_hash # It changes when control and/or code are changed
+        code_hash = file.read(8).hex().upper()
+        ENTRY["CONTROL_HASH"] = control_hash
+        ENTRY["GLASM_HASH"] = glasm_hash # it doesn't change when GLASM is identical but control and code are different, it's possible that also this is a hash of source file
+        ENTRY["CODE_HASH"] = code_hash
     elif (magic == 0x19866891):
         ENTRY["TYPE"] = "OUTPUT"
         ENTRY["DATA"] = []
@@ -235,10 +267,12 @@ def Process(magic, file):
             if (type == GLSLC.SECTION_TYPE_DEBUG_INFO):
                 ENTRY["DATA"].append(ProcessDebugInfo(file, offset))
                 continue
+            elif (type == GLSLC.SECTION_TYPE_ASM_DUMP):
+                ENTRY["DATA"].append(ProcessAsmDump(file, offset))
+                continue
             elif (type != GLSLC.SECTION_TYPE_GPU_CODE):
                 ENTRY3 = {}
                 match(type):
-                    case GLSLC.SECTION_TYPE_ASM_DUMP: ENTRY3["TYPE"] = "ASM_DUMP"
                     case GLSLC.SECTION_TYPE_PERF_STATS: ENTRY3["TYPE"] = "PERF_STATS"
                     case GLSLC.SECTION_TYPE_REFLECTION: ENTRY3["TYPE"] = "REFLECTION"
                 ENTRY["DATA"].append(ENTRY3)
@@ -258,6 +292,10 @@ def Process(magic, file):
             ENTRY["DATA"].append(ENTRY2)
     elif (magic == 0x19292919):
         ENTRY["TYPE"] = "REFLECTION"
+    elif (magic == 0x12898888):
+        ENTRY["TYPE"] = "ASM_DUMP"
+        file.seek(0x108, 1)
+        ENTRY["ASSEMBLY"] = read_string(file)
     return ENTRY
 
 
