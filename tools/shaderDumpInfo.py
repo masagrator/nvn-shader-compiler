@@ -7,7 +7,6 @@ import glob
 import sys
 import os
 import argparse
-import textwrap
 
 parser = argparse.ArgumentParser(description="Dump shader metadata from unpacked NVN shader files.")
 parser.add_argument("input_folder", help="Folder containing the unpacked shader files")
@@ -246,12 +245,12 @@ def Process(magic, file):
                 print("Unknown stage: %d!" % type)
                 sys.exit()
         file.seek(base + 0x7D0)
-        control_hash = file.read(8).hex().upper()
+        source_hash = file.read(8).hex().upper()
         glasm_hash = file.read(8).hex().upper()
-        code_hash = file.read(8).hex().upper()
-        ENTRY["CONTROL_HASH"] = control_hash
-        ENTRY["GLASM_HASH"] = glasm_hash # it doesn't change when GLASM is identical but control and code are different, it's possible that also this is a hash of source file
-        ENTRY["CODE_HASH"] = code_hash
+        shader_hash = file.read(8).hex().upper()
+        ENTRY["SOURCE_HASH"] = source_hash # This hash seems to be calculated after normalizing formatting as changing break lines only does nothing
+        ENTRY["GLASM_HASH"] = glasm_hash # it doesn't change when GLASM is identical but source code, control and code are different
+        ENTRY["SHADER_HASH"] = shader_hash # It changes when control and/or code are changed
     elif (magic == 0x19866891):
         ENTRY["TYPE"] = "OUTPUT"
         ENTRY["DATA"] = []
