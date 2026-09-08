@@ -292,9 +292,7 @@ def Process(magic, file):
     elif (magic == 0x19292919):
         ENTRY["TYPE"] = "REFLECTION"
     elif (magic == 0x12898888):
-        ENTRY["TYPE"] = "ASM_DUMP"
-        file.seek(0x108, 1)
-        ENTRY["ASSEMBLY"] = read_string(file)
+        ENTRY["TYPE"] = "PERF_STATS"
     return ENTRY
 
 
