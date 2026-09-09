@@ -185,7 +185,7 @@ def Process(magic, file):
         if (flags & 4 == 4):
             ENTRY["FLAGS"].append("OUTPUT-GPU-BINARIES")
         if (flags & 8 == 8):
-            ENTRY["FLAGS"].append("OUTPUT-PERF-STATS")
+            ENTRY["FLAGS"].append("OUTPUT-PERM-STATS")
         if (flags & 0x10 == 0x10):
             ENTRY["FLAGS"].append("OUTPUT-REFLECTION")
         if (flags & 0x20 == 0x20):
@@ -244,13 +244,18 @@ def Process(magic, file):
             case _:
                 print("Unknown stage: %d!" % type)
                 sys.exit()
-        file.seek(base + 0x7D0)
-        source_hash = file.read(8).hex().upper()
-        glasm_hash = file.read(8).hex().upper()
-        shader_hash = file.read(8).hex().upper()
-        ENTRY["SOURCE_HASH"] = source_hash # This hash seems to be calculated after normalizing formatting as changing break lines only does nothing
-        ENTRY["GLASM_HASH"] = glasm_hash # it doesn't change when GLASM is identical but source code, control and code are different
-        ENTRY["SHADER_HASH"] = shader_hash # It changes when control and/or code are changed
+        file.seek(base + 0x770)
+        control_hash = file.read(8).hex().upper()
+        ENTRY["CONTROL_HASH"] = control_hash
+        if (gpu_minor >= 14): # It doesn't exist for 9, we don't have 10-13 to check
+            file.seek(base + 0x7D0)
+            source_hash = file.read(8).hex().upper()
+            glasm_hash = file.read(8).hex().upper()
+            shader_hash = file.read(8).hex().upper()
+            ENTRY["SOURCE_HASH"] = source_hash # This hash seems to be calculated after normalizing formatting as changing break lines only does nothing
+            ENTRY["GLASM_HASH"] = glasm_hash # it doesn't change when GLASM is identical but source code, control and code are different
+            ENTRY["SHADER_HASH"] = shader_hash # It changes when control and/or code are changed
+
     elif (magic == 0x19866891):
         ENTRY["TYPE"] = "OUTPUT"
         ENTRY["DATA"] = []
