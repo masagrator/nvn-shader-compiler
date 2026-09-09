@@ -244,7 +244,7 @@ def Process(magic, file):
             case _:
                 print("Unknown stage: %d!" % type)
                 sys.exit()
-        file.seek(base + 0x770)
+        file.seek(base + 0x778)
         control_hash = file.read(8).hex().upper()
         ENTRY["CONTROL_HASH"] = control_hash
         if (gpu_minor >= 14): # It doesn't exist for 9, we don't have 10-13 to check
