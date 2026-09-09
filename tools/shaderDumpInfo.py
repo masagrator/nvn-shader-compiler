@@ -185,7 +185,7 @@ def Process(magic, file):
         if (flags & 4 == 4):
             ENTRY["FLAGS"].append("OUTPUT-GPU-BINARIES")
         if (flags & 8 == 8):
-            ENTRY["FLAGS"].append("OUTPUT-PERM-STATS")
+            ENTRY["FLAGS"].append("OUTPUT-PERF-STATS")
         if (flags & 0x10 == 0x10):
             ENTRY["FLAGS"].append("OUTPUT-REFLECTION")
         if (flags & 0x20 == 0x20):
