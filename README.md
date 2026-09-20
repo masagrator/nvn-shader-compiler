@@ -14,6 +14,7 @@ Minimum 2.5 GB of free RAM is required. It was tested with very heavy shaders th
 | 17.16 | 51 | 1.14 | シークレットゲーム KILLER QUEEN 1.0.0-1.0.1 | subsdk1 |
 | 17.17 | 57 | 1.15 | Civilization VI 1.0.0<br>Assassin's Creed III 1.0.0-1.0.3<br>Pokemon: Let's Go 1.0.0-1.0.2 | subsdk0<br>subsdk1<br>subsdk0 |
 | 17.20 | 62 | 1.15 | A Hat in Time 1.0.0-1.0.4 | subsdk0 |
+| 17.20 | 65 | 1.15 | Pokemon Sword/Shield 1.0.0-1.3.2 | subsdk1 |
 | 17.20 | 68 | 1.15 | The Legend of Zelda: Link's Awakening 1.0.0-1.1.0<br>Civilization VI 1.2.19 | subsdk0 |
 | 17.21 | 75 | 1.16 | Pokemon Cafe Mix 1.0.0-1.100.0 | subsdk0 |
 | 17.21 | 88 | 1.16 | Cave Story+ 1.3<br>Pokemon Legends: Arceus 1.0.0-1.1.1 | subsdk0<br>subsdk1 |
