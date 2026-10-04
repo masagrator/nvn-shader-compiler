@@ -397,6 +397,192 @@ def ProcessReflection(buf, hdr_off, data_off, section_size):
     return RESULT
 
 
+
+# ---- Bob Jenkins lookup8 hash() (64-bit), used by NVN for SOURCE/GLASM/SHADER hashes
+_M64 = (1 << 64) - 1
+def _mix64(a, b, c):
+    a = (a - b - c) & _M64; a ^= c >> 43
+    b = (b - c - a) & _M64; b ^= (a << 9) & _M64
+    c = (c - a - b) & _M64; c ^= b >> 8
+    a = (a - b - c) & _M64; a ^= c >> 38
+    b = (b - c - a) & _M64; b ^= (a << 23) & _M64
+    c = (c - a - b) & _M64; c ^= b >> 5
+    a = (a - b - c) & _M64; a ^= c >> 35
+    b = (b - c - a) & _M64; b ^= (a << 49) & _M64
+    c = (c - a - b) & _M64; c ^= b >> 11
+    a = (a - b - c) & _M64; a ^= c >> 12
+    b = (b - c - a) & _M64; b ^= (a << 18) & _M64
+    c = (c - a - b) & _M64; c ^= b >> 22
+    return a, b, c
+
+def jenkins_lookup8(k, level=0):
+    n = len(k); a = b = level & _M64; c = 0x9e3779b97f4a7c13; i = 0
+    while n - i >= 24:
+        a = (a + int.from_bytes(k[i:i + 8], "little")) & _M64
+        b = (b + int.from_bytes(k[i + 8:i + 16], "little")) & _M64
+        c = (c + int.from_bytes(k[i + 16:i + 24], "little")) & _M64
+        a, b, c = _mix64(a, b, c); i += 24
+    c = (c + n) & _M64
+    t = k[i:]; L = len(t)
+    for j in range(L - 1, 15, -1): c = (c + (t[j] << (8 * (j - 16) + 8))) & _M64
+    for j in range(min(L, 16) - 1, 7, -1): b = (b + (t[j] << (8 * (j - 8)))) & _M64
+    for j in range(min(L, 8) - 1, -1, -1): a = (a + (t[j] << (8 * j))) & _M64
+    return _mix64(a, b, c)[2]
+
+GL_PRIM = {0x0: "POINTS", 0x1: "LINES", 0xA: "LINES_ADJACENCY", 0x4: "TRIANGLES", 0xC: "TRIANGLES_ADJACENCY",
+           0x7: "QUADS", 0x8E7A: "ISOLINES"}
+GL_SPACING = {0x202: "EQUAL", 0x8E7B: "FRACTIONAL_ODD", 0x8E7C: "FRACTIONAL_EVEN"}
+GL_WINDING = {0x900: "CW", 0x901: "CCW"}
+
+
+INTERLOCK_NVN = {1: ("PIXEL_ORDERED", 0x2), 2: ("PIXEL_UNORDERED", 0xA), 3: ("SAMPLE_ORDERED", 0x1),
+                 4: ("SAMPLE_UNORDERED", 0x9)}
+
+def control_program(cb, stage):
+    """Program-level control fields (0x6F0..0x7BF).  3D method names are from NVIDIA open-gpu-doc
+    classes/3d/clb197.h (method byte offset = deko3d method index * 4)."""
+    R = {}
+    R["CODE_LENGTH"] = u32(cb, 0x6F8)                 # unpadded, from the code magic; SHADER_HASH input
+    R["CONSTBUF1_SIZE"] = u32(cb, 0x6FC)
+    R["CONSTBUF1_OFFSET"] = u32(cb, 0x700)
+    R["CODE_BLOB_SIZE"] = u32(cb, 0x704)
+    R["CODE_ENTRY_OFFSET"] = u32(cb, 0x708)           # 0x30 = SPH (graphics), 0x100 = code (compute)
+    R["NUM_GPRS"] = u32(cb, 0x70C)
+    R["SCRATCH_PER_WARP"] = u32(cb, 0x710)            # local*32 + CRS
+    if stage == 1:
+        R["EARLY_FRAGMENT_TESTS"] = bool(cb[0x718])   # method 0x084 SET_API_MANDATED_EARLY_Z
+        R["POST_DEPTH_COVERAGE"] = bool(cb[0x719])    # method 0x3C7 SET_POST_Z_PS_IMASK
+        if cb[0x71A]:                                  # method 0x3D0 SET_CONSTANT_COLOR_RENDERING (+0x3D1..0x3D4 RGBA)
+            R["CONSTANT_COLOR"] = list(struct.unpack_from("<4f", cb, 0x724))
+        R["WRITES_DEPTH"] = bool(u32(cb, 0x71C))
+        il = u32(cb, 0x720)
+        if il:                                         # method 0x489 SET_PIXEL_SHADER_INTERLOCK_CONTROL
+            name, reg = INTERLOCK_NVN.get(il, (il, None))
+            R["INTERLOCK"] = name
+            if reg is not None: R["INTERLOCK_REGISTER"] = "0x%X" % reg
+        R["COLOR_OUTPUT_COUNT"] = u32(cb, 0x734)      # highest location + 1
+        zb = (1 if cb[0x748] else 0) | (0x10 if cb[0x749] else 0)
+        R["ZCULL_BOUNDS"] = "0x%02X" % zb               # method 0x65B SET_ZCULL_BOUNDS: bit0 z-min unbounded, bit4 z-max unbounded
+        R["PER_SAMPLE_SHADING"] = bool(cb[0x74A])     # method 0x1D5 SET_HYBRID_ANTI_ALIAS_CONTROL
+    if stage == 5:
+        R["CS_BLOCK_DIMS"] = list(struct.unpack_from("<3I", cb, 0x748))
+        R["CS_SHARED_MEM"] = u32(cb, 0x754)
+        R["CS_USES_BARRIER"] = bool(u32(cb, 0x764))
+    if stage == 2:
+        R["GS_VIEWPORT_RELATIVE_LAYER"] = bool(cb[0x798])   # method 0x47C SET_OFFSET_RENDER_TARGET_INDEX
+        if cb[0x799]:                                        # method 0x490 SET_POST_VTG_SHADER_ATTRIBUTE_SKIP_MASK
+            R["GS_PASSTHROUGH_SKIP_MASK"] = ["0x%08X" % w for w in struct.unpack_from("<8I", cb, 0x7A0)]
+    return R
+
+# Field gating by NVN GPU version (control word 0x08).  Layout below 0x7D0 is common; newer GPU versions
+# appended fields.  Versions 1.10-1.13 have not been checked, so words in a gated range on an older version
+# are reported raw under UNVERIFIED_CONTROL_WORDS instead of being decoded.
+GATE_V10 = 0x7D0   # 0x7D0..0x847 : GPU 1.10+
+GATE_V15 = 0x848   # 0x848..0x84F : GPU 1.15+
+GATE_V16 = 0x850   # 0x850..      : GPU 1.16+
+
+def control_tail(cb, stage, gpu_minor, code_bytes=None):
+    """Decode the remaining control-section fields.  `cb` = control bytes (from its magic)."""
+    R = {}
+    go, gs = u32(cb, 0x14), u32(cb, 0x18)
+    end = min(go or 0x878, 0x878)          # GLASM text starts right after the fixed fields
+
+    # ---- common part (below 0x7D0)
+    R["CONTROL_SIZE_COPY"] = u32(cb, 0x7C8)            # == 0x20 / 0x6F0
+    if u32(cb, 0x7C0): R["USES_SUBROUTINES"] = True
+    if cb[0x6ED]:
+        # transform feedback. per buffer b (0..3):
+        #   0xDC +0x80b  u8[]  vec4 output slot per entry (0x20+n = location n; 0xFD/0xFB = gap)
+        #   0x2DC+0x80b  u8[]  first component inside that slot
+        #   0x4DC+0x80b  u8[]  number of components
+        #   0x6DC+2b u16 stride, 0x6E4+b u8 vertex stream, 0x6E8+b u8 entry count
+        #   0x6EC u8 number of buffers (highest+1), 0x6ED u8 enabled
+        xfb = []
+        for b in range(cb[0x6EC]):
+            n = cb[0x6E8 + b]
+            if not n: continue
+            ent = []
+            for i in range(n):
+                slot, comp, cnt = cb[0xDC + 0x80 * b + i], cb[0x2DC + 0x80 * b + i], cb[0x4DC + 0x80 * b + i]
+                ent.append({"SKIP": cnt} if slot in (0xFD, 0xFB) else
+                           {"LOCATION": slot - 0x20, "COMPONENT": comp, "COUNT": cnt} if slot >= 0x20 else
+                           {"SLOT": "0x%02X" % slot, "COMPONENT": comp, "COUNT": cnt})
+            xfb.append({"BUFFER": b, "STREAM": cb[0x6E4 + b],
+                        "STRIDE": struct.unpack_from("<H", cb, 0x6DC + 2 * b)[0], "ENTRIES": ent})
+        R["TRANSFORM_FEEDBACK"] = xfb
+    if u32(cb, 0x1C):
+        R["DYNAMIC_CONST_ARRAYS_SIZE"] = u32(cb, 0x1C)       # register-indexed const arrays at start of c1, rounded to 0x80
+    if cb[0x780]: R["HAS_DEBUG_INFO"] = True                 # debug hash at 0x778
+    if cb[0x79A]: R["TESSELLATION_AND_PASSTHROUGH_GS"] = True
+    if stage == 5:
+        R["CS_LOCAL_MEM_LO"] = u32(cb, 0x758); R["CS_LOCAL_MEM_HI"] = u32(cb, 0x75C); R["CS_CRS_SIZE"] = u32(cb, 0x760)
+    if stage == 4:
+        R["TES_DOMAIN"] = GL_PRIM.get(u32(cb, 0x738), u32(cb, 0x738))
+        R["TES_SPACING"] = GL_SPACING.get(u32(cb, 0x73C), u32(cb, 0x73C))
+        R["TES_POINT_MODE"] = bool(u32(cb, 0x740))
+        R["TES_WINDING"] = GL_WINDING.get(u32(cb, 0x744), u32(cb, 0x744))
+    KNOWN = set(range(0x00, 0x24, 4)) | set(range(0x2C, 0x5C, 4)) | set(range(0xDC, 0x6F0, 4)) | \
+        set(range(0x6F0, 0x768, 4)) | {0x778, 0x77C, 0x780, 0x790, 0x794, 0x798} | set(range(0x7A0, 0x7C4, 4)) | \
+        {0x7C8}
+
+    # ---- GPU 1.10+ : 0x7D0..0x847
+    if gpu_minor >= 10:
+        src_h, glasm_h, sh_h = u64(cb, 0x7D0), u64(cb, 0x7D8), u64(cb, 0x7E0)
+        R["SOURCE_HASH"] = "%016X" % src_h                 # Jenkins lookup8(source text bytes, 0)
+        R["GLASM_HASH"] = "%016X" % glasm_h                # lookup8(GLASM text, 0)
+        R["GLASM_HASH_OK"] = jenkins_lookup8(cb[go:go + gs]) == glasm_h
+        R["SHADER_HASH"] = "%016X" % sh_h                  # lookup8(code section[0:ctrl 0x6F8], 0)
+        if code_bytes is not None:
+            R["SHADER_HASH_OK"] = jenkins_lookup8(code_bytes[:u32(cb, 0x6F8)]) == sh_h
+        R["CONTROL_SIZE_COPY2"] = u32(cb, 0x7E8)
+        n_img, n_smp = cb[0x7F8], cb[0x7F9]
+        if n_img:
+            R["IMAGE_BINDINGS"] = list(cb[0x7FC:0x7FC + n_img])
+        if n_smp:
+            R["SAMPLER_BINDINGS"] = list(cb[0x804:0x804 + n_smp])   # combined samplers only
+        if cb[0x831]: R["WRITES_IMAGES"] = True
+        if cb[0x841]: R["READS_IMAGES"] = True
+        if cb[0x832]: R["USES_BINDLESS_TEXTURES"] = True
+        if cb[0x840]: R["USES_GLOBAL_POINTERS"] = True           # NV_shader_buffer_load / uint64 handles
+        nptr = u32(cb, 0x7F0)
+        if nptr:
+            # 12-byte records at ctrl[0x20] (end of control), one per *used* buffer member of a 64-bit type
+            # (int64/uint64/double scalars, vectors, matrices) or pointer type:
+            #   u8 binding, u8 buffer type (0 UBO, 1 SSBO), s16 GLSLCpiqTypeEnum (-1 = pointer),
+            #   u32 byte offset of the member in the block, u32 array size (1 = not an array, 0 = unsized)
+            tab = u32(cb, 0x20); recs = []
+            for i in range(nptr):
+                binding, btype, ty, off, arr = struct.unpack_from("<BBhII", cb, tab + 12 * i)
+                recs.append({"BUFFER": {0: "UBO", 1: "SSBO"}.get(btype, btype), "BINDING": binding,
+                             "TYPE": "POINTER" if ty == -1 else piq_type(ty), "OFFSET": off, "ARRAY_SIZE": arr})
+            R["BUFFER_64BIT_MEMBERS"] = recs                      # 0x7EC = table size (12*count), 0x7F0 = count
+        if stage == 2:
+            R["GS_INPUT_PRIMITIVE"] = GL_PRIM.get(u32(cb, 0x828), u32(cb, 0x828))
+        KNOWN |= set(range(0x7D0, 0x824, 4)) | {0x828, 0x830, 0x840}
+
+    # ---- GPU 1.15+ : 0x848..0x84F
+    if gpu_minor >= 15:
+        if stage == 3:
+            R["TCS_DEFAULT_DOMAIN"] = GL_PRIM.get(u32(cb, 0x848), u32(cb, 0x848))
+            R["TCS_DEFAULT_SPACING"] = GL_SPACING.get(u32(cb, 0x84C), u32(cb, 0x84C))
+        KNOWN |= {0x848, 0x84C}
+
+    # ---- GPU 1.16+ : 0x850..
+    if gpu_minor >= 16:
+        if stage == 3:
+            R["TCS_DEFAULT_WINDING"] = GL_WINDING.get(u32(cb, 0x854), u32(cb, 0x854))
+        if stage == 4:
+            # 0x868 always 1 for TES, 0x86C fractional spacing, 0x870 point mode, 0x874 clockwise
+            R["TES_FLAGS_868"] = [u32(cb, 0x868), u32(cb, 0x86C), u32(cb, 0x870), u32(cb, 0x874)]
+        KNOWN |= {0x854, 0x868, 0x86C, 0x870, 0x874}
+
+    gate = GATE_V10 if gpu_minor < 10 else GATE_V15 if gpu_minor < 15 else GATE_V16 if gpu_minor < 16 else end
+    unk = {"0x%X" % o: "0x%X" % u32(cb, o) for o in range(0, min(gate, end), 4) if u32(cb, o) and o not in KNOWN}
+    if unk: R["UNKNOWN_CONTROL_WORDS"] = unk
+    unv = {"0x%X" % o: "0x%X" % u32(cb, o) for o in range(gate, end, 4) if u32(cb, o)}
+    if unv: R["UNVERIFIED_CONTROL_WORDS"] = unv          # gated range on an older GPU version: not decoded
+    return R
+
 def presenter2(dumper, data):
     if '\n' in data:
         return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='|')
@@ -629,14 +815,9 @@ def Process(magic, file, hdr_off=None, section_size=None):
         file.seek(base + 0x778)
         debug_hash = file.read(8).hex().upper()
         ENTRY["DEBUG-INFO_HASH"] = debug_hash
-        if (gpu_minor >= 14): # It doesn't exist for 9, we don't have 10-13 to check
-            file.seek(base + 0x7D0)
-            source_hash = file.read(8).hex().upper()
-            glasm_hash = file.read(8).hex().upper()
-            shader_hash = file.read(8).hex().upper()
-            ENTRY["SOURCE_HASH"] = source_hash # This hash seems to be calculated after normalizing formatting as changing break lines only does nothing
-            ENTRY["GLASM_HASH"] = glasm_hash # it doesn't change when GLASM is identical but source code, control and code are different
-            ENTRY["SHADER_HASH"] = shader_hash # It changes when control and/or code are changed
+        cb = BUF[base:]
+        ENTRY.update(control_program(cb, type))
+        ENTRY.update(control_tail(cb, type, gpu_minor, CODE_FOR_CONTROL.get(base)))
 
     elif (magic == 0x19866891):
         ENTRY["TYPE"] = "OUTPUT"
@@ -690,6 +871,7 @@ def Process(magic, file, hdr_off=None, section_size=None):
             control_offset = raw["controlOffset"]
             code_offset = raw["dataOffset"]
             ENTRY2 = []
+            CODE_FOR_CONTROL[offset + control_offset] = BUF[offset + code_offset: offset + code_offset + raw["dataSize"]]
             file.seek(offset + control_offset)
             magic = int.from_bytes(file.read(4), "little")
             file.seek(-4, 1)
@@ -716,6 +898,7 @@ def Process(magic, file, hdr_off=None, section_size=None):
     return ENTRY
 
 
+CODE_FOR_CONTROL = {}
 yaml.add_representer(str, presenter2)
 yaml.add_representer(str, presenter2, Dumper=yaml.SafeDumper)
 
