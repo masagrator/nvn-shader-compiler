@@ -438,21 +438,44 @@ GL_WINDING = {0x900: "CW", 0x901: "CCW"}
 INTERLOCK_NVN = {1: ("PIXEL_ORDERED", 0x2), 2: ("PIXEL_UNORDERED", 0xA), 3: ("SAMPLE_ORDERED", 0x1),
                  4: ("SAMPLE_UNORDERED", 0x9)}
 
-def control_program(cb, stage):
+def code_end_from_code(code, stage):
+    """End of the instruction stream as glslc counts it: the last self-branch 'BRA $' that is followed only by
+    NOPs, padded to a multiple of 64 bytes from the start of the code (0x80 graphics, 0x100 compute)."""
+    start = 0x100 if stage == 5 else 0x80
+    NOP = 0x50B0000000070F00
+    end = None
+    for pos in range(start, len(code) - 7, 8):
+        if (pos - start) % 32 == 0:
+            continue
+        i = u64(code, pos)
+        if i & 0xFFF0000000000020 == 0xE240000000000000 and (i >> 20) & 0xFFFFFF in (0xFFFFF8, 0xFFFFF0):
+            e = start + ((pos + 8 - start + 63) & ~63)
+            if all(u64(code, q) in (0, NOP) for q in range(pos + 8, min(e, len(code) - 7), 8) if (q - start) % 32):
+                end = e
+    return end
+
+def control_program(cb, stage, code_bytes=None):
     """Program-level control fields (0x6F0..0x7BF).  3D method names are from NVIDIA open-gpu-doc
     classes/3d/clb197.h (method byte offset = deko3d method index * 4)."""
     R = {}
-    R["CODE_LENGTH"] = u32(cb, 0x6F8)                 # unpadded, from the code magic; SHADER_HASH input
+    # code length counted from the SPH (0x30) for graphics / from the code start (0x100) for compute, up to the
+    # final 'BRA $' padded to 64 bytes.  SHADER_HASH hashes the first CODE_LENGTH bytes of the code section.
+    R["CODE_LENGTH"] = u32(cb, 0x6F8)
+    if code_bytes is not None:
+        e = code_end_from_code(code_bytes, stage)
+        if e is not None:
+            R["CODE_LENGTH_OK"] = e - (0x100 if stage == 5 else 0x30) == u32(cb, 0x6F8)
     R["CONSTBUF1_SIZE"] = u32(cb, 0x6FC)
-    R["CONSTBUF1_OFFSET"] = u32(cb, 0x700)
+    R["CONSTBUF1_OFFSET"] = u32(cb, 0x700)           # code end aligned to 256; set even when c1 is empty
     R["CODE_BLOB_SIZE"] = u32(cb, 0x704)
     R["CODE_ENTRY_OFFSET"] = u32(cb, 0x708)           # 0x30 = SPH (graphics), 0x100 = code (compute)
-    R["NUM_GPRS"] = u32(cb, 0x70C)
+    R["NUM_GPRS"] = u32(cb, 0x70C)                   # highest register written + 1, minimum 4
     R["SCRATCH_PER_WARP"] = u32(cb, 0x710)            # local*32 + CRS
     if stage == 1:
         R["EARLY_FRAGMENT_TESTS"] = bool(cb[0x718])   # method 0x084 SET_API_MANDATED_EARLY_Z
         R["POST_DEPTH_COVERAGE"] = bool(cb[0x719])    # method 0x3C7 SET_POST_Z_PS_IMASK
         if cb[0x71A]:                                  # method 0x3D0 SET_CONSTANT_COLOR_RENDERING (+0x3D1..0x3D4 RGBA)
+            # also set (with 0,0,0,0) for a fragment shader that writes no colour at all
             R["CONSTANT_COLOR"] = list(struct.unpack_from("<4f", cb, 0x724))
         R["WRITES_DEPTH"] = bool(u32(cb, 0x71C))
         il = u32(cb, 0x720)
@@ -511,7 +534,7 @@ def control_tail(cb, stage, gpu_minor, code_bytes=None):
                         "STRIDE": struct.unpack_from("<H", cb, 0x6DC + 2 * b)[0], "ENTRIES": ent})
         R["TRANSFORM_FEEDBACK"] = xfb
     if u32(cb, 0x1C):
-        R["DYNAMIC_CONST_ARRAYS_SIZE"] = u32(cb, 0x1C)       # register-indexed const arrays at start of c1, rounded to 0x80
+        R["DYNAMIC_CONST_ARRAYS_SIZE"] = u32(cb, 0x1C)       # register-indexed const arrays at start of c1 (switch jump tables not counted), rounded to 0x80
     if cb[0x780]: R["HAS_DEBUG_INFO"] = True                 # debug hash at 0x778
     if cb[0x79A]: R["TESSELLATION_AND_PASSTHROUGH_GS"] = True
     if stage == 5:
@@ -537,12 +560,12 @@ def control_tail(cb, stage, gpu_minor, code_bytes=None):
         R["CONTROL_SIZE_COPY2"] = u32(cb, 0x7E8)
         n_img, n_smp = cb[0x7F8], cb[0x7F9]
         if n_img:
-            R["IMAGE_BINDINGS"] = list(cb[0x7FC:0x7FC + n_img])
+            R["IMAGE_BINDINGS"] = list(cb[0x7FC:0x7FC + n_img])         # declaration order, not sorted
         if n_smp:
-            R["SAMPLER_BINDINGS"] = list(cb[0x804:0x804 + n_smp])   # combined samplers only
+            R["SAMPLER_BINDINGS"] = list(cb[0x804:0x804 + n_smp])   # combined samplers only, declaration order
         if cb[0x831]: R["WRITES_IMAGES"] = True
         if cb[0x841]: R["READS_IMAGES"] = True
-        if cb[0x832]: R["USES_BINDLESS_TEXTURES"] = True
+        if cb[0x832]: R["USES_BINDLESS_TEXTURES"] = True       # set from the source: also when the code never uses one
         if cb[0x840]: R["USES_GLOBAL_POINTERS"] = True           # NV_shader_buffer_load / uint64 handles
         nptr = u32(cb, 0x7F0)
         if nptr:
@@ -816,7 +839,7 @@ def Process(magic, file, hdr_off=None, section_size=None):
         debug_hash = file.read(8).hex().upper()
         ENTRY["DEBUG-INFO_HASH"] = debug_hash
         cb = BUF[base:]
-        ENTRY.update(control_program(cb, type))
+        ENTRY.update(control_program(cb, type, CODE_FOR_CONTROL.get(base)))
         ENTRY.update(control_tail(cb, type, gpu_minor, CODE_FOR_CONTROL.get(base)))
 
     elif (magic == 0x19866891):
